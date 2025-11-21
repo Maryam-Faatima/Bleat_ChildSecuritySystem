@@ -541,5 +541,66 @@ public static boolean acknowledgeMessageByChild(int messageId) {
         return false;
     }
 }
+//==================================================================================================
+// location saving in database
+// ...existing code...
+
+   public static boolean storeLocationData(int deviceId, double latitude, double longitude) {
+      String sql = "INSERT INTO Locations (DeviceId, Latitude, Longitude) VALUES (?, ?, ?)";
+
+      try (Connection conn = getConnection();
+           PreparedStatement ps = conn.prepareStatement(sql)) {
+
+         ps.setInt(1, deviceId);
+         ps.setDouble(2, latitude);
+         ps.setDouble(3, longitude);
+
+         int rows = ps.executeUpdate();
+         if (rows > 0) {
+            System.out.println("Location data stored successfully.");
+            return true;
+         } else {
+            System.out.println("Failed to store location data.");
+            return false;
+         }
+
+      } catch (SQLException e) {
+         e.printStackTrace();
+         return false;
+      }
+   }
+   //==================================================================================================     
+   // Parent seeing the childs location
+   public static void viewChildLocation(int childId) {
+      String sql = "SELECT TOP 1 l.LocationId, l.DeviceId, l.Latitude, l.Longitude, l.Timestamp " +
+                   "FROM Locations l " +
+                   "JOIN Devices d ON l.DeviceId = d.DeviceId " +
+                   "WHERE d.ChildId = ? " +
+                   "ORDER BY l.Timestamp DESC";
+
+      try (Connection conn = getConnection();
+           PreparedStatement ps = conn.prepareStatement(sql)) {
+
+         ps.setInt(1, childId);
+         ResultSet rs = ps.executeQuery();
+
+         if (rs.next()) {
+            System.out.println("\n=== Child Location ===");
+            System.out.println("Location ID: " + rs.getInt("LocationId"));
+            System.out.println("Device ID: " + rs.getInt("DeviceId"));
+            System.out.println("Latitude: " + rs.getDouble("Latitude"));
+            System.out.println("Longitude: " + rs.getDouble("Longitude"));
+            System.out.println("Timestamp: " + rs.getTimestamp("Timestamp"));
+            System.out.println("=======================\n");
+         } else {
+            System.out.println("No location data found for this child.");
+         }
+
+         rs.close();
+
+      } catch (SQLException e) {
+         e.printStackTrace();
+      }
+   }
 
 }

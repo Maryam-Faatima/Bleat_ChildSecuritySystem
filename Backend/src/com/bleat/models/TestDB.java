@@ -273,6 +273,44 @@ private static void testViewMessagesChild(int childId) {
         System.out.println(ok ? "Message acknowledged." : "Failed to acknowledge.");
     }
 }
+// ...existing code...
+
+   private static void testStoreLocation() {
+      Scanner sc = new Scanner(System.in);
+
+      System.out.print("Enter Device ID: ");
+      int deviceId = sc.nextInt();
+
+      System.out.print("Enter Latitude (-90 to 90): ");
+      double latitude = sc.nextDouble();
+
+      System.out.print("Enter Longitude (-180 to 180): ");
+      double longitude = sc.nextDouble();
+
+      System.out.println("\nStoring location data...");
+
+      boolean ok = DBHandler.storeLocationData(deviceId, latitude, longitude);
+
+      if (ok) {
+         System.out.println("Location data stored successfully!");
+      } else {
+         System.out.println("Failed to store location data.");
+      }
+   }
+// Parent viewing thte childs location
+private static void testViewChildLocation() {
+      Scanner sc = new Scanner(System.in);
+
+      System.out.print("Enter Parent ID: ");
+      int parentId = sc.nextInt();
+
+      System.out.print("Enter Child ID to view location: ");
+      int childId = sc.nextInt();
+
+      System.out.println("\nFetching child location...");
+      DBHandler.viewChildLocation(childId);
+   }
+
 
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
@@ -291,6 +329,8 @@ private static void testViewMessagesChild(int childId) {
         System.out.println("11. Send Message from Child to Parent");
         System.out.println("12. View Messages for Parent");
         System.out.println("13. View Messages for Child");
+        System.out.println("14. Store Location Data");
+        System.out.println("15. View Child Location");
         System.out.print("Enter choice: ");
         int ch = sc.nextInt();
 
@@ -324,6 +364,10 @@ private static void testViewMessagesChild(int childId) {
             System.out.print("Enter Child ID to view messages: ");
             int childId = sc.nextInt();
             testViewMessagesChild(childId);
+        }else if (ch==14) {
+            testStoreLocation();
+        } else if (ch==15) {
+            testViewChildLocation();
         }
         else {
           System.out.println("Invalid choice.");
