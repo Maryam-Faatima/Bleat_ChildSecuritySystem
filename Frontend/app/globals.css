@@ -1,0 +1,135 @@
+/* Tailwind Base */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom Colors (Pastel Theme) */
+:root {
+  --color-primary: #a3d2ca;    /* Soft teal */
+  --color-secondary: #f6d6ad;  /* Soft peach */
+  --color-accent: #ffe5d9;     /* Light coral */
+  --color-bg: #f9f9f9;         /* Very light gray */
+  --color-card: #ffffff;       /* White cards */
+  --color-text: #1f2937;       /* Dark gray text */
+  --color-text-light: #4b5563; /* Medium gray */
+  --color-alert: #ffb3b3;      /* Light red for alerts */
+  --color-success: #c1f0c1;    /* Light green for success */
+  --color-border: #d1d5db;     /* Light gray border */
+  --color-icon-placeholder: #e5e7eb; /* Light gray icon bg */
+}
+
+/* Body */
+body {
+  @apply bg-[var(--color-bg)] text-[var(--color-text)] font-sans;
+}
+
+/* Links */
+a {
+  @apply text-[var(--color-primary)] hover:underline;
+}
+
+/* Buttons */
+.btn {
+  @apply px-4 py-2 rounded-lg font-semibold transition-all duration-200 cursor-pointer;
+}
+.btn-primary {
+  @apply bg-[var(--color-primary)] text-white hover:bg-teal-400;
+}
+.btn-secondary {
+  @apply bg-[var(--color-secondary)] text-[var(--color-text)] hover:bg-[#f7c98b];
+}
+.btn-accent {
+  @apply bg-[var(--color-accent)] text-[var(--color-text)] hover:bg-[#ffd3c4];
+}
+
+/* Cards */
+.card {
+  @apply bg-[var(--color-card)] shadow-md rounded-xl p-6 mb-6 border border-[var(--color-border)] flex flex-col gap-4;
+}
+
+/* Alerts */
+.alert {
+  @apply rounded-lg p-4 mb-4 font-medium border-l-4;
+}
+.alert-success {
+  @apply bg-[var(--color-success)] text-[var(--color-text)] border-l-green-500;
+}
+.alert-error {
+  @apply bg-[var(--color-alert)] text-[var(--color-text)] border-l-red-500;
+}
+
+/* Inputs */
+input, select, textarea {
+  @apply border border-[var(--color-border)] rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] w-full;
+}
+input::placeholder, textarea::placeholder {
+  @apply text-[var(--color-text-light)];
+}
+
+/* Tables */
+.table {
+  @apply w-full border-collapse text-[var(--color-text)];
+}
+.table th {
+  @apply bg-[var(--color-primary)] text-white px-4 py-2 text-left rounded-tl-lg rounded-tr-lg;
+}
+.table td {
+  @apply border border-[var(--color-border)] px-4 py-2;
+}
+
+/* Containers */
+.container {
+  @apply w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+/* Centering Utilities */
+.flex-center {
+  @apply flex items-center justify-center;
+}
+.grid-center {
+  @apply grid place-items-center;
+}
+/* Section Borders */
+.section {
+  @apply border border-[var(--color-border)] rounded-lg p-6 mb-6 bg-[var(--color-card)];
+}
+
+/* Icon Placeholder */
+.icon-placeholder {
+  @apply w-10 h-10 rounded-full bg-[var(--color-icon-placeholder)] flex items-center justify-center text-[var(--color-text-light)];
+}
+
+/* Scrollbars (optional) */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f9f9f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a3a3a3;
+}
+
+/* Text Utilities */
+.text-muted {
+  @apply text-[var(--color-text-light)];
+}
+.text-accent {
+  @apply text-[var(--color-accent)];
+}
+
+/* Hover Effects */
+.hover-card:hover {
+  @apply shadow-xl transform scale-105 transition-all duration-300;
+}
+
+/* Responsive Layouts */
+@media (max-width: 640px) {
+  .container {
+    @apply px-4;
+  }
+}

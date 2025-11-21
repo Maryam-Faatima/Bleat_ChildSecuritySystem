@@ -1,0 +1,84 @@
+###############################
+# Node.js
+###############################
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+###############################
+# React / Frontend / Next.js / CRA build outputs
+###############################
+build/
+dist/
+out/
+.next/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+coverage/
+.eslintcache
+.cache/
+
+###############################
+# Logs
+###############################
+logs/
+*.log
+*.log.*
+log.txt
+
+###############################
+# OS & Editor files
+###############################
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+###############################
+# IDEs
+###############################
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+###############################
+# Python (if backend uses Python)
+###############################
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+env/
+venv/
+.venv/
+
+###############################
+# Java / Spring Boot (optional)
+###############################
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+###############################
+# Other large files
+###############################
+*.zip
+*.tar
+*.gz
+*.7z
+*.rar
+*.mp4
+*.exe
+*.psd
