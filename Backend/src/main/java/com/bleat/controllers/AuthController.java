@@ -12,27 +12,15 @@ public class AuthController {
     @PostMapping("/login")
     public LoginResponse login(@RequestBody LoginRequest request) {
         try {
-            // Use DB-backed login flows
-            // 1) Try parent/admin user by username
-            com.bleat.models.User u = com.bleat.models.DBHandler.loginByUsername(request.name, request.password);
-            if (u != null) {
-                if (u instanceof com.bleat.models.Admin) {
-                    return new LoginResponse(true, "Login successful", u.getUserId(), u.getName(), "ADMIN");
-                } else if (u instanceof com.bleat.models.Parent) {
-                    return new LoginResponse(true, "Login successful", u.getUserId(), u.getName(), "PARENT");
-                }
+            // Delegate to AuthenticationManager
+            com.bleat.services.AuthenticationManager.LoginResult res = com.bleat.services.AuthenticationManager
+                    .getInstance().login(request.name, request.password);
+            if (res.success) {
+                if ("CHILD".equalsIgnoreCase(res.role))
+                    return new LoginResponse(true, res.message, res.id, res.name, "CHILD", res.parentId);
+                return new LoginResponse(true, res.message, res.id, res.name, res.role);
             }
-
-            // 2) Try child login
-            com.bleat.models.Child c = com.bleat.models.DBHandler.getChildByUsernameAndPassword(request.name,
-                    request.password);
-            if (c != null) {
-                return new LoginResponse(true, "Login successful", c.getChildId(), c.getName(), "CHILD",
-                        c.getParentId());
-            }
-
-            // Not found
-            return new LoginResponse(false, "Invalid credentials or not approved yet", -1, null, null);
+            return new LoginResponse(false, res.message, -1, null, null);
         } catch (Exception e) {
             return new LoginResponse(false, e.getMessage(), -1, null, null);
         }
@@ -41,18 +29,12 @@ public class AuthController {
     @PostMapping("/signup")
     public SignupResponse signup(@RequestBody SignupRequest request) {
         try {
-            if ("PARENT".equalsIgnoreCase(request.role)) {
-                // Use username as a fallback email placeholder if none provided
-                String email = request.name + "@local";
-                boolean ok = com.bleat.models.DBHandler.signup(request.name, email, request.phoneNumber,
-                        request.password, "PARENT");
-                if (ok)
-                    return new SignupResponse(true, "Parent signup received and is pending admin approval", -1);
-                return new SignupResponse(false, "Signup failed (duplicate or DB error)", -1);
-            } else if ("ADMIN".equalsIgnoreCase(request.role)) {
-                return new SignupResponse(false, "Admin accounts cannot be created via signup", -1);
-            }
-            return new SignupResponse(false, "Invalid role", -1);
+            // Delegate to AuthenticationManager
+            String email = request.name + "@local";
+            com.bleat.services.AuthenticationManager.SignupResult sr = com.bleat.services.AuthenticationManager
+                    .getInstance().signup(request.name, email,
+                            request.phoneNumber, request.password, request.role);
+            return new SignupResponse(sr.success, sr.message, sr.userId);
         } catch (Exception e) {
             return new SignupResponse(false, e.getMessage(), -1);
         }

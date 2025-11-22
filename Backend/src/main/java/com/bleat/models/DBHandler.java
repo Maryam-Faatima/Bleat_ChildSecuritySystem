@@ -25,58 +25,66 @@ public class DBHandler {
         }
     }
 
-    // ====================== SIGN UP ======================
-    public static boolean signup(String fullName, String email, String phone, String password, String role) {
+    // ====================== LOW-LEVEL USER/ACCOUNT HELPERS ======================
+    public static boolean userExistsByEmailOrUsername(String email, String username) {
         String checkSql = "SELECT COUNT(*) FROM Users WHERE Email = ? OR UserName = ?";
-        String insertUserSql = "INSERT INTO Users (UserName, PasswordHash, Role, Email, Phone) VALUES (?, ?, ?, ?, ?)";
-        String insertParentSql = "INSERT INTO Parents (ParentId) VALUES (?)"; // IsAuthenticated defaults to 0
-        String insertAuthReqSql = "INSERT INTO ParentAuthRequests (ParentId) VALUES (?)"; // Admin approval request
-
-        try (Connection conn = getConnection();
-                PreparedStatement checkStmt = conn.prepareStatement(checkSql);
-                PreparedStatement insertUserStmt = conn.prepareStatement(insertUserSql,
-                        PreparedStatement.RETURN_GENERATED_KEYS);
-                PreparedStatement insertParentStmt = conn.prepareStatement(insertParentSql);
-                PreparedStatement insertAuthReqStmt = conn.prepareStatement(insertAuthReqSql)) {
-
-            // 1. Check if email or username exists
+        try (Connection conn = getConnection(); PreparedStatement checkStmt = conn.prepareStatement(checkSql)) {
             checkStmt.setString(1, email);
-            checkStmt.setString(2, fullName);
+            checkStmt.setString(2, username);
             ResultSet rs = checkStmt.executeQuery();
-            if (rs.next() && rs.getInt(1) > 0) {
-                System.out.println("Email or username already exists!");
-                return false;
-            }
+            if (rs.next())
+                return rs.getInt(1) > 0;
+            return false;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return true; // if DB error, treat as exists to avoid duplicate attempts
+        }
+    }
 
-            // 2. Insert into Users table
+    public static int createUser(String fullName, String email, String phone, String password, String role) {
+        String insertUserSql = "INSERT INTO Users (UserName, PasswordHash, Role, Email, Phone) VALUES (?, ?, ?, ?, ?)";
+        try (Connection conn = getConnection();
+                PreparedStatement insertUserStmt = conn.prepareStatement(insertUserSql,
+                        PreparedStatement.RETURN_GENERATED_KEYS)) {
             insertUserStmt.setString(1, fullName);
-            insertUserStmt.setString(2, password); // Hash in real app
-            insertUserStmt.setString(3, role.toUpperCase());
+            insertUserStmt.setString(2, password);
+            insertUserStmt.setString(3, role != null ? role.toUpperCase() : null);
             insertUserStmt.setString(4, email);
             insertUserStmt.setString(5, phone);
-
             int rows = insertUserStmt.executeUpdate();
             if (rows == 0)
-                return false;
-
-            // 3. Get generated UserId
-            ResultSet generatedKeys = insertUserStmt.getGeneratedKeys();
-            if (generatedKeys.next() && "PARENT".equalsIgnoreCase(role)) {
-                int userId = generatedKeys.getInt(1);
-
-                // Insert into Parents table with IsAuthenticated = 0
-                insertParentStmt.setInt(1, userId);
-                insertParentStmt.executeUpdate();
-
-                // Insert authentication request for admin approval
-                insertAuthReqStmt.setInt(1, userId);
-                insertAuthReqStmt.executeUpdate();
-
-                System.out.println("Parent signup successful. Awaiting admin authentication.");
+                return -1;
+            try (ResultSet gk = insertUserStmt.getGeneratedKeys()) {
+                if (gk.next())
+                    return gk.getInt(1);
             }
+            return -1;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return -1;
+        }
+    }
 
-            return true;
+    public static boolean insertParentRecord(int userId) {
+        String insertParentSql = "INSERT INTO Parents (ParentId) VALUES (?)"; // IsAuthenticated defaults to 0
+        try (Connection conn = getConnection();
+                PreparedStatement insertParentStmt = conn.prepareStatement(insertParentSql)) {
+            insertParentStmt.setInt(1, userId);
+            int rows = insertParentStmt.executeUpdate();
+            return rows > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
 
+    public static boolean insertParentAuthRequest(int userId) {
+        String insertAuthReqSql = "INSERT INTO ParentAuthRequests (ParentId) VALUES (?)"; // Admin approval request
+        try (Connection conn = getConnection();
+                PreparedStatement insertAuthReqStmt = conn.prepareStatement(insertAuthReqSql)) {
+            insertAuthReqStmt.setInt(1, userId);
+            int rows = insertAuthReqStmt.executeUpdate();
+            return rows > 0;
         } catch (SQLException e) {
             e.printStackTrace();
             return false;
@@ -104,17 +112,7 @@ public class DBHandler {
                 boolean isAuthenticated = rs.getBoolean("IsAuthenticated");
 
                 if ("PARENT".equalsIgnoreCase(role)) {
-                    if (!isAuthenticated) {
-                        System.out.println(
-                                "Parent not yet authenticated by admin! Sending new authentication request...");
-                        String reqSql = "INSERT INTO ParentAuthRequests (ParentId) VALUES (?)";
-                        try (PreparedStatement reqStmt = conn.prepareStatement(reqSql)) {
-                            reqStmt.setInt(1, userId);
-                            reqStmt.executeUpdate();
-                        }
-                        return null;
-                    }
-                    System.out.println("Parent authentication verified. Login successful.");
+                    // return parent object (authentication checks are handled by service layer)
                     return new Parent(userId, userName, password, phone);
                 } else {
                     return new Admin(userId, userName, password);
@@ -734,15 +732,6 @@ public class DBHandler {
                 boolean isAuthenticated = rs.getBoolean("IsAuthenticated");
 
                 if ("PARENT".equalsIgnoreCase(role)) {
-                    if (!isAuthenticated) {
-                        // queue auth request
-                        String reqSql = "INSERT INTO ParentAuthRequests (ParentId) VALUES (?)";
-                        try (PreparedStatement reqStmt = conn.prepareStatement(reqSql)) {
-                            reqStmt.setInt(1, userId);
-                            reqStmt.executeUpdate();
-                        }
-                        return null;
-                    }
                     return new Parent(userId, userName, password, phone);
                 } else {
                     return new Admin(userId, userName, password);
@@ -778,6 +767,22 @@ public class DBHandler {
         } catch (SQLException e) {
             e.printStackTrace();
             return null;
+        }
+    }
+
+    // Check whether a parent is authenticated (admin approved)
+    public static boolean isParentAuthenticated(int parentId) {
+        String sql = "SELECT IsAuthenticated FROM Parents WHERE ParentId = ?";
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, parentId);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                return rs.getBoolean("IsAuthenticated");
+            }
+            return false;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
         }
     }
 }
