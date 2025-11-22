@@ -1,8 +1,10 @@
 "use client";
 import Link from 'next/link';
+import AuthenticationManager from '@/app/lib/AuthenticationManager';
 
 export default function Navbar() {
   const linkStyle = { color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 500, fontSize: '0.9rem' } as const;
+  const user = AuthenticationManager.getLoggedInUser();
 
   return (
     <header className="w-100 bg-white shadow-sm">
@@ -14,11 +16,16 @@ export default function Navbar() {
             <small className="text-muted" style={{ fontSize: '0.75rem' }}>Child Security System</small>
           </div>
         </div>
-        <nav className="d-flex" style={{ gap: 16 }}>
+        <nav className="d-flex" style={{ gap: 16, alignItems: 'center' }}>
           <Link href="/login" style={linkStyle}>Login</Link>
           <Link href="/signup" style={linkStyle}>Signup</Link>
           <Link href="/parent/dashboard" style={linkStyle}>Parent</Link>
           <Link href="/admin/dashboard" style={linkStyle}>Admin</Link>
+          {user && user.role === 'parent' && (
+            <Link href="/parent/children?addChild=true">
+              <button className="btn btn-sm btn-primary">+ Add Child</button>
+            </Link>
+          )}
         </nav>
       </div>
     </header>

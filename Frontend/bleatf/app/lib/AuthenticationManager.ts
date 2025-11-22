@@ -1,7 +1,7 @@
 // AuthenticationManager - Singleton pattern for authentication
 class AuthenticationManager {
   private static instance: AuthenticationManager;
-  private loggedInUser: { userId: number; role: 'parent' | 'admin'; email: string } | null = null;
+  private loggedInUser: { userId: number; role: 'parent' | 'admin' | 'child'; email: string; parentId?: number } | null = null;
 
   private constructor() {}
 
@@ -24,7 +24,7 @@ class AuthenticationManager {
     return false;
   }
 
-  setLoggedInUser(user: { userId: number; role: 'parent' | 'admin'; email: string }): void {
+  setLoggedInUser(user: { userId: number; role: 'parent' | 'admin' | 'child'; email: string; parentId?: number }): void {
     this.loggedInUser = user;
   }
 

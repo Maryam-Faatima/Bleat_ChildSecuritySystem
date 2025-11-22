@@ -21,14 +21,24 @@ export default function LoginPage() {
       // Call backend API to authenticate
       const response = await ApiService.login(name, password);
       if (response.success) {
+        // Determine role from backend: ADMIN / PARENT / CHILD
+        const backendRole = (response.role || 'PARENT').toUpperCase();
+        const role = backendRole === 'ADMIN' ? 'admin' : backendRole === 'CHILD' ? 'child' : 'parent';
         // Set authenticated user in AuthenticationManager
         AuthenticationManager.setLoggedInUser({
           userId: response.userId,
-          role: 'parent', // Assume parent for now; backend could return role
+          role: role as any,
           email: name,
+          parentId: backendRole === 'CHILD' ? (response as any).parentId : undefined,
         });
-        // Route to parent dashboard
-        router.push('/parent/dashboard');
+        // Route based on role. Child should go to its own dashboard.
+        if (role === 'admin') {
+          router.push('/admin/dashboard');
+        } else if (role === 'child') {
+          router.push('/child/dashboard');
+        } else {
+          router.push('/parent/dashboard');
+        }
       } else {
         setError(response.message || 'Invalid name or password');
       }

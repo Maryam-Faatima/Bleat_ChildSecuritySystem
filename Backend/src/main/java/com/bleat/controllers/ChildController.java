@@ -2,6 +2,7 @@ package com.bleat.controllers;
 
 import org.springframework.web.bind.annotation.*;
 import com.bleat.models.*;
+import com.bleat.services.AlertService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -18,12 +19,16 @@ public class ChildController {
     @PostMapping("/{childId}/sos")
     public SosAlertResponse sendSosAlert(@PathVariable int childId, @RequestBody SosAlertRequest request) {
         try {
-            int alertId = (int) (System.currentTimeMillis() % 100000);
-            Alert alert = new Alert("SOS", "SOS triggered by child: " + request.message);
-            alerts.put(alertId, alert);
+            // find child and linked parent
+            Child child = ParentController.getChildById(childId);
+            if (child == null)
+                return new SosAlertResponse(false, "Child not found", -1, null);
+            int parentId = child.getParentId();
 
-            return new SosAlertResponse(true, "SOS alert sent to parents and emergency contacts", alertId,
-                    LocalDateTime.now().toString());
+            AlertService.SosAlert a = AlertService.getInstance().addAlert(childId, parentId,
+                    request != null ? request.message : null, request != null ? request.latitude : null,
+                    request != null ? request.longitude : null);
+            return new SosAlertResponse(true, "SOS alert sent to parents and emergency contacts", a.sosId, a.timestamp);
         } catch (Exception e) {
             return new SosAlertResponse(false, e.getMessage(), -1, null);
         }
@@ -41,14 +46,17 @@ public class ChildController {
         return history;
     }
 
-    @PostMapping("/{childId}/sos/cancel")
+    @PostMapping("/{childId}/sos/{alertId}/cancel")
     public CancelSosResponse cancelSos(@PathVariable int childId, @PathVariable int alertId) {
         try {
-            if (alerts.containsKey(alertId)) {
-                alerts.remove(alertId);
-                return new CancelSosResponse(true, "SOS alert cancelled and parents notified", alertId);
+            AlertService.SosAlert a = AlertService.getInstance().getAlert(alertId);
+            if (a == null || a.childId != childId) {
+                return new CancelSosResponse(false, "Alert not found", -1);
             }
-            return new CancelSosResponse(false, "Alert not found", -1);
+            boolean ok = AlertService.getInstance().cancelAlert(alertId);
+            if (!ok)
+                return new CancelSosResponse(false, "Failed to cancel alert", -1);
+            return new CancelSosResponse(true, "SOS alert cancelled and parents notified", alertId);
         } catch (Exception e) {
             return new CancelSosResponse(false, e.getMessage(), -1);
         }
@@ -61,6 +69,20 @@ public class ChildController {
             int locId = (int) (System.currentTimeMillis() % 100000);
             Location loc = new Location(request.latitude, request.longitude);
             locations.put(locId, loc);
+
+            // Update in-memory child device if linked
+            Child child = ParentController.getChildById(childId);
+            if (child != null && child.getDevice() != null) {
+                child.getDevice().updateLocation(loc);
+                // Persist to DB if possible using deviceId
+                try {
+                    int deviceId = child.getDevice().getDeviceId();
+                    com.bleat.models.DBHandler.storeLocationData(deviceId, request.latitude, request.longitude);
+                } catch (Exception ex) {
+                    // best-effort persistence; log and continue
+                    System.out.println("Failed to persist location to DB: " + ex.getMessage());
+                }
+            }
 
             return new ShareLocationResponse(true, "Location shared successfully", locId, loc.getLatitude(),
                     loc.getLongitude(), loc.getTimestamp().toString());
@@ -94,6 +116,8 @@ public class ChildController {
 
     public static class SosAlertRequest {
         public String message;
+        public Double latitude;
+        public Double longitude;
     }
 
     public static class SosAlertResponse {

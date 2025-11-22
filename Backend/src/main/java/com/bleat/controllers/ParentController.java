@@ -90,9 +90,11 @@ public class ParentController {
     public AddChildResponse addChild(@PathVariable int parentId, @RequestBody AddChildRequest request) {
         try {
             int childId = (int) (System.currentTimeMillis() % 100000);
-            Child child = new Child(childId, request.name, request.age);
-            children.put(childId, child);
-            return new AddChildResponse(true, "Child added successfully", childId);
+            // Create child with username/password provided by parent. Child accounts are
+            // pending admin approval.
+            Child child = new Child(childId, request.name, request.age, parentId, request.username, request.password);
+            com.bleat.services.PendingChildService.getInstance().addPending(child);
+            return new AddChildResponse(true, "Child created and pending admin approval", childId);
         } catch (Exception e) {
             return new AddChildResponse(false, e.getMessage(), -1);
         }
@@ -158,7 +160,14 @@ public class ParentController {
     @GetMapping("/{parentId}/alerts")
     public List<AlertDto> getAlerts(@PathVariable int parentId) {
         List<AlertDto> alertList = new ArrayList<>();
-        // In real app, fetch alerts from database
+        // Fetch alerts from the in-memory AlertService
+        List<com.bleat.services.AlertService.SosAlert> alerts = com.bleat.services.AlertService.getInstance()
+                .listAlertsByParent(parentId);
+        for (com.bleat.services.AlertService.SosAlert a : alerts) {
+            String type = "SOS";
+            String msg = a.message != null ? a.message : "SOS from child " + a.childId;
+            alertList.add(new AlertDto(a.sosId, a.childId, type, msg, a.timestamp));
+        }
         return alertList;
     }
 
@@ -324,6 +333,30 @@ public class ParentController {
         }
     }
 
+    // Public helper used by AdminController / AuthController
+    public static java.util.Optional<Child> getChildByUsernameAndPassword(String username, String password) {
+        return children.values().stream()
+                .filter(c -> username != null && username.equals(c.getUsername()) && password != null
+                        && password.equals(c.getPassword()))
+                .findFirst();
+    }
+
+    // Public helper to fetch a child by id
+    public static Child getChildById(int childId) {
+        return children.get(childId);
+    }
+
+    public static void addApprovedChild(Child child) {
+        if (child == null)
+            return;
+        children.put(child.getChildId(), child);
+        try {
+            com.bleat.services.AuthenticationManager.getInstance().addUser(child.getChildId(), child.getUsername());
+        } catch (Exception ex) {
+            // best-effort
+        }
+    }
+
     // ===== USE CASE 11: Set Safe Zones =====
     @PostMapping("/{parentId}/child/{childId}/safe-zone/add")
     public AddSafeZoneResponse addSafeZone(@PathVariable int parentId, @PathVariable int childId,
@@ -367,6 +400,8 @@ public class ParentController {
     public static class AddChildRequest {
         public String name;
         public int age;
+        public String username;
+        public String password;
     }
 
     public static class AddChildResponse {
@@ -534,12 +569,14 @@ public class ParentController {
 
     public static class AlertDto {
         public int alertId;
+        public int childId;
         public String type;
         public String message;
         public String timestamp;
 
-        public AlertDto(int alertId, String type, String message, String timestamp) {
+        public AlertDto(int alertId, int childId, String type, String message, String timestamp) {
             this.alertId = alertId;
+            this.childId = childId;
             this.type = type;
             this.message = message;
             this.timestamp = timestamp;

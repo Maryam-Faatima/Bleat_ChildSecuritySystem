@@ -13,6 +13,7 @@ export interface LoginResponse {
   userId: number;
   name: string;
   message: string;
+  role?: string;
 }
 
 export interface SignupRequest {
@@ -38,6 +39,8 @@ export interface ChildDto {
 export interface AddChildRequest {
   name: string;
   age: number;
+  username?: string;
+  password?: string;
 }
 
 export interface AddChildResponse {
@@ -59,6 +62,15 @@ export interface UpdateChildResponse {
 
 // Location Interfaces
 export interface LocationDto {
+  latitude: number;
+  longitude: number;
+  timestamp: string;
+}
+
+export interface ShareLocationResponse {
+  success: boolean;
+  message: string;
+  locationId: number;
   latitude: number;
   longitude: number;
   timestamp: string;
@@ -105,8 +117,15 @@ export interface SosAlertResponse {
   timestamp: string;
 }
 
+export interface CancelSosResponse {
+  success: boolean;
+  message: string;
+  alertId: number;
+}
+
 export interface AlertDto {
   alertId: number;
+  childId?: number;
   type: string;
   message: string;
   timestamp: string;
@@ -217,7 +236,9 @@ export class ApiService {
 
   static async signup(data: SignupRequest): Promise<SignupResponse> {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/signup`, {
+      const url = `${API_BASE_URL}/auth/signup`;
+      console.debug('ApiService.signup -> POST', url, data);
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -225,12 +246,16 @@ export class ApiService {
         },
         body: JSON.stringify(data),
       });
-      
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const body = await response.text().catch(() => '<<no-body>>');
+        console.error('Signup failed response', { url, status: response.status, body });
+        throw new Error(`HTTP error! status: ${response.status} body: ${body}`);
       }
-      
-      return await response.json();
+
+      const json = await response.json();
+      console.debug('ApiService.signup -> success', json);
+      return json;
     } catch (error) {
       console.error('Signup error:', error);
       throw error;
@@ -513,6 +538,60 @@ export class ApiService {
     }
   }
 
+  static async childTriggerSos(childId: number, message?: string, latitude?: number, longitude?: number): Promise<SosAlertResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/child/${childId}/sos`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ message, latitude, longitude }),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Child trigger SOS error:', error);
+      throw error;
+    }
+  }
+
+  static async childShareLocation(childId: number, latitude: number, longitude: number): Promise<ShareLocationResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/child/${childId}/location/share`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ latitude, longitude }),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Child share location error:', error);
+      throw error;
+    }
+  }
+
+  static async cancelSosAsChild(childId: number, alertId: number): Promise<CancelSosResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/child/${childId}/sos/${alertId}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Cancel SOS error:', error);
+      throw error;
+    }
+  }
+
   static async getAlerts(parentId: number): Promise<AlertDto[]> {
     try {
       const response = await fetch(
@@ -728,6 +807,94 @@ export class ApiService {
       return await response.json();
     } catch (error) {
       console.error('Get pending users error:', error);
+      throw error;
+    }
+  }
+
+  static async getPendingChildren(): Promise<any[]> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/children/pending`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Get pending children error:', error);
+      throw error;
+    }
+  }
+
+  static async authenticateChild(childId: number, approve: boolean, reason?: string): Promise<any> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/children/${childId}/authenticate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ approve, reason }),
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Authenticate child error:', error);
+      throw error;
+    }
+  }
+
+  // ---- ADMIN: Manage Parents ----
+  static async getParents(): Promise<any[]> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/parents`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Get parents error:', error);
+      throw error;
+    }
+  }
+
+  static async addParent(data: { name: string; password: string; phoneNumber?: string }): Promise<any> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/parents/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Add parent error:', error);
+      throw error;
+    }
+  }
+
+  static async updateParent(parentId: number, data: { phoneNumber?: string }): Promise<any> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/parents/${parentId}/update`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Update parent error:', error);
+      throw error;
+    }
+  }
+
+  static async deactivateParent(parentId: number): Promise<any> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/parents/${parentId}/deactivate`, {
+        method: 'DELETE',
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Deactivate parent error:', error);
       throw error;
     }
   }

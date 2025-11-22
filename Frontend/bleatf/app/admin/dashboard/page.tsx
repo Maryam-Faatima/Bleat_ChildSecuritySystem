@@ -10,6 +10,7 @@ import { ApiService } from '@/lib/api';
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'parents' | 'children' | 'devices' | 'alerts' | 'audit'>('overview');
   const [pendingUsers, setPendingUsers] = useState<any[]>([]);
+  const [pendingChildren, setPendingChildren] = useState<any[]>([]);
   const [parents, setParents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddParentForm, setShowAddParentForm] = useState(false);
@@ -26,8 +27,22 @@ export default function AdminDashboard() {
       // Load pending users from backend
       const pending = await ApiService.getPendingUsers();
       setPendingUsers(pending || []);
-      // Load parents - using mock for now
-      setParents(mockParent || []);
+        // Load pending children too
+        try {
+          const pchildren = await ApiService.getPendingChildren();
+          setPendingChildren(pchildren || []);
+        } catch (err) {
+          console.warn('Failed to load pending children', err);
+          setPendingChildren([]);
+        }
+      // Load parents from backend
+      try {
+        const backendParents = await ApiService.getParents();
+        setParents(backendParents || []);
+      } catch (err) {
+        console.warn('Failed to load parents from API, using mock data', err);
+        setParents(mockParent || []);
+      }
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -50,21 +65,36 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleAuthenticateChild = async (childId: number, approved: boolean) => {
+    try {
+      const resp = await ApiService.authenticateChild(childId, approved);
+      if (resp && resp.success) {
+        alert(resp.message || `Child ${approved ? 'approved' : 'rejected'} successfully`);
+        await loadData();
+      } else {
+        alert('Failed to process child authentication');
+      }
+    } catch (error) {
+      console.error('Error authenticating child:', error);
+      alert('Failed to process child authentication');
+    }
+  };
+
   const handleAddParent = async () => {
     if (!newParent.name || !newParent.email) {
       alert('Please fill in all required fields');
       return;
     }
-
     try {
       setLoading(true);
-      // Call backend API to add parent
-      const response = await ApiService.login(1, ''); // Placeholder
-      if (response.success) {
+      const resp = await ApiService.addParent({ name: newParent.name, password: 'changeme', phoneNumber: newParent.phone });
+      if (resp && resp.success) {
         alert('Parent added successfully');
         setNewParent({ name: '', email: '', phone: '' });
         setShowAddParentForm(false);
-        loadData();
+        await loadData();
+      } else {
+        alert('Failed to add parent: ' + (resp?.message || 'unknown'));
       }
     } catch (error) {
       console.error('Error adding parent:', error);
@@ -79,9 +109,13 @@ export default function AdminDashboard() {
 
     try {
       setLoading(true);
-      // Call backend API to remove parent
-      alert('Parent removed successfully');
-      loadData();
+      const resp = await ApiService.deactivateParent(parentId);
+      if (resp && resp.success) {
+        alert('Parent removed successfully');
+        await loadData();
+      } else {
+        alert('Failed to remove parent: ' + (resp?.message || 'unknown'));
+      }
     } catch (error) {
       console.error('Error removing parent:', error);
       alert('Failed to remove parent');
@@ -227,14 +261,14 @@ export default function AdminDashboard() {
               <div className="row row-cols-1 row-cols-md-2 g-3">
                 {Array.isArray(parents) && parents.length > 0 ? (
                   parents.map((parent: any) => (
-                    <div key={parent.id || Math.random()} className="col">
+                    <div key={parent.userId} className="col">
                       <div className="card p-3">
                         <h6 className="fw-bold">{parent.name}</h6>
-                        <p className="small mb-1"><strong>Email:</strong> {parent.email}</p>
-                        <p className="small mb-2"><strong>Phone:</strong> {parent.phoneNumber || 'N/A'}</p>
+                        <p className="small mb-1"><strong>Phone:</strong> {parent.phoneNumber || 'N/A'}</p>
+                        <p className="small mb-2"><strong>Status:</strong> {parent.status || 'ACTIVE'}</p>
                         <button 
                           className="btn btn-sm btn-outline-danger w-100"
-                          onClick={() => handleRemoveParent(parent.id)}
+                          onClick={() => handleRemoveParent(parent.userId)}
                         >
                           Remove
                         </button>
@@ -277,6 +311,40 @@ export default function AdminDashboard() {
                           <button 
                             className="btn btn-sm btn-danger flex-fill"
                             onClick={() => handleAuthenticateUser(user.userId, false)}
+                          >
+                            ✕ Reject
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <h5 className="fw-bold mt-4 mb-3">Pending Children</h5>
+              {pendingChildren.length === 0 ? (
+                <div className="alert alert-success">No children pending authentication</div>
+              ) : (
+                <div className="row row-cols-1 row-cols-md-2 g-3">
+                  {pendingChildren.map((child: any) => (
+                    <div key={child.childId} className="col">
+                      <div className="card p-3">
+                        <h6 className="fw-bold">{child.name}</h6>
+                        <p className="small mb-1"><strong>Parent ID:</strong> {child.parentId}</p>
+                        <p className="small mb-2"><strong>Age:</strong> {child.age}</p>
+                        <p className="small mb-3">
+                          <span className="badge bg-warning text-dark">Status: {child.status}</span>
+                        </p>
+                        <div className="d-flex gap-2">
+                          <button 
+                            className="btn btn-sm btn-success flex-fill"
+                            onClick={() => handleAuthenticateChild(child.childId, true)}
+                          >
+                            ✓ Approve
+                          </button>
+                          <button 
+                            className="btn btn-sm btn-danger flex-fill"
+                            onClick={() => handleAuthenticateChild(child.childId, false)}
                           >
                             ✕ Reject
                           </button>

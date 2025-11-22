@@ -3,6 +3,7 @@ C:\Users\USR\OneDrive\Documents\Bleat_ChildSecuritySystem[1]\Bleat_ChildSecurity
 C:\Users\USR\OneDrive\Documents\Bleat_ChildSecuritySystem[1]\Bleat_ChildSecuritySystem\Backend\src\main\java\com\bleat\models\DBHandler.java
 C:\Users\USR\OneDrive\Documents\Bleat_ChildSecuritySystem[1]\Bleat_ChildSecuritySystem\Backend\src\main\java\com\bleat\models\Report.java
 C:\Users\USR\OneDrive\Documents\Bleat_ChildSecuritySystem[1]\Bleat_ChildSecuritySystem\Backend\src\main\java\com\bleat\services\SOSService.java
+C:\Users\USR\OneDrive\Documents\Bleat_ChildSecuritySystem[1]\Bleat_ChildSecuritySystem\Backend\src\main\java\com\bleat\services\AlertService.java
 C:\Users\USR\OneDrive\Documents\Bleat_ChildSecuritySystem[1]\Bleat_ChildSecuritySystem\Backend\src\main\java\com\bleat\services\ParentRegistry.java
 C:\Users\USR\OneDrive\Documents\Bleat_ChildSecuritySystem[1]\Bleat_ChildSecuritySystem\Backend\src\main\java\com\bleat\controllers\AuthController.java
 C:\Users\USR\OneDrive\Documents\Bleat_ChildSecuritySystem[1]\Bleat_ChildSecuritySystem\Backend\src\main\java\com\bleat\models\AuditLog.java
@@ -20,6 +21,9 @@ C:\Users\USR\OneDrive\Documents\Bleat_ChildSecuritySystem[1]\Bleat_ChildSecurity
 C:\Users\USR\OneDrive\Documents\Bleat_ChildSecuritySystem[1]\Bleat_ChildSecuritySystem\Backend\src\main\java\com\bleat\services\AuthenticationManager.java
 C:\Users\USR\OneDrive\Documents\Bleat_ChildSecuritySystem[1]\Bleat_ChildSecuritySystem\Backend\src\main\java\com\bleat\services\PendingUserService.java
 C:\Users\USR\OneDrive\Documents\Bleat_ChildSecuritySystem[1]\Bleat_ChildSecuritySystem\Backend\src\main\java\com\bleat\services\NotificationService.java
+C:\Users\USR\OneDrive\Documents\Bleat_ChildSecuritySystem[1]\Bleat_ChildSecuritySystem\Backend\src\main\java\com\bleat\services\PendingChildService.java
+C:\Users\USR\OneDrive\Documents\Bleat_ChildSecuritySystem[1]\Bleat_ChildSecuritySystem\Backend\src\main\java\com\bleat\controllers\AuthFallbackController.java
+C:\Users\USR\OneDrive\Documents\Bleat_ChildSecuritySystem[1]\Bleat_ChildSecuritySystem\Backend\src\main\java\com\bleat\controllers\DiagnosticController.java
 C:\Users\USR\OneDrive\Documents\Bleat_ChildSecuritySystem[1]\Bleat_ChildSecuritySystem\Backend\src\main\java\com\bleat\models\SafeZone.java
 C:\Users\USR\OneDrive\Documents\Bleat_ChildSecuritySystem[1]\Bleat_ChildSecuritySystem\Backend\src\main\java\com\bleat\services\ISOSService.java
 C:\Users\USR\OneDrive\Documents\Bleat_ChildSecuritySystem[1]\Bleat_ChildSecuritySystem\Backend\src\main\java\com\bleat\controllers\AdminController.java

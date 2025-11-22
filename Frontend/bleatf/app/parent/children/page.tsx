@@ -1,6 +1,8 @@
 'use client';
 import Link from 'next/link';
 import { useState } from 'react';
+import AuthenticationManager from '@/app/lib/AuthenticationManager';
+import { ApiService, AddChildRequest } from '@/lib/api';
 import { mockChildren } from '@/app/lib/mockData';
 import EmergencyContact from '@/app/components/EmergencyContact';
 import SafeZone from '@/app/components/SafeZone';
@@ -9,6 +11,27 @@ import { mockSafeZones } from '@/app/lib/mockData';
 export default function ChildrenPage() {
   const [selectedChild, setSelectedChild] = useState(mockChildren[0]);
   const [showAddEmergencyContact, setShowAddEmergencyContact] = useState(false);
+  const [showAddChildForm, setShowAddChildForm] = useState(false);
+  const [newChild, setNewChild] = useState<{ name: string; age: number; username?: string; password?: string }>({ name: '', age: 6, username: '', password: '' });
+
+  const handleAddChild = async () => {
+    const user = AuthenticationManager.getLoggedInUser();
+    if (!user) { alert('Please login as parent to add child'); return; }
+    try {
+      const payload: AddChildRequest = { name: newChild.name, age: newChild.age, username: newChild.username, password: newChild.password };
+      const resp = await ApiService.addChild(user.userId, payload);
+      if (resp && resp.success) {
+        alert('Child created and pending admin approval (ID: ' + resp.childId + ')');
+        setNewChild({ name: '', age: 6, username: '', password: '' });
+        setShowAddChildForm(false);
+      } else {
+        alert('Failed to create child: ' + (resp?.message || 'unknown'));
+      }
+    } catch (error) {
+      console.error('Add child error', error);
+      alert('Failed to create child');
+    }
+  };
 
   return (
     <div
@@ -34,7 +57,9 @@ export default function ChildrenPage() {
           <div className="text-center mb-4 w-100">
             <h1 className="h4 mb-1" style={{ fontWeight: 700 }}>Manage Children</h1>
             <p className="text-muted small mb-3">Edit profiles, emergency contacts, and safe zones</p>
-            <Link href="/parent/dashboard" className="btn btn-sm btn-outline-secondary">Back to Dashboard</Link>
+            <div style={{display:'flex', gap:8, justifyContent:'center'}}>
+              <Link href="/parent/dashboard" className="btn btn-sm btn-outline-secondary">Back to Dashboard</Link>
+            </div>
           </div>
 
           <div className="row g-2 w-100">
@@ -42,9 +67,12 @@ export default function ChildrenPage() {
             <div className="col-12 col-md-4">
               <div className="card h-100">
                 <div className="card-body p-3">
-                  <h6 className="card-title mb-2">Children</h6>
+                  <div className="d-flex justify-content-between align-items-center mb-2">
+                    <h6 className="card-title mb-0">Children</h6>
+                    <button className="btn btn-sm btn-primary" onClick={() => setShowAddChildForm(!showAddChildForm)}>{showAddChildForm ? 'Cancel' : '+ Add Child'}</button>
+                  </div>
                   <div className="list-group list-group-flush">
-                    {mockChildren.map((child) => (
+                      {mockChildren.map((child) => (
                       <button
                         key={child.childId}
                         onClick={() => setSelectedChild(child)}
@@ -82,6 +110,29 @@ export default function ChildrenPage() {
                   <button className="btn btn-secondary btn-sm w-100 mt-2">Edit Profile</button>
                 </div>
               </div>
+
+              {showAddChildForm && (
+                <div className="card mb-3">
+                  <div className="card-body">
+                    <h6 className="mb-2">Create Child Account (pending admin approval)</h6>
+                    <div className="mb-2">
+                      <input className="form-control" placeholder="Child name" value={newChild.name} onChange={(e)=>setNewChild({...newChild, name: e.target.value})} />
+                    </div>
+                    <div className="mb-2">
+                      <input className="form-control" type="number" placeholder="Age" value={newChild.age} onChange={(e)=>setNewChild({...newChild, age: parseInt(e.target.value||'0')})} />
+                    </div>
+                    <div className="mb-2">
+                      <input className="form-control" placeholder="Username for child login" value={newChild.username} onChange={(e)=>setNewChild({...newChild, username: e.target.value})} />
+                    </div>
+                    <div className="mb-2">
+                      <input className="form-control" type="password" placeholder="Password" value={newChild.password} onChange={(e)=>setNewChild({...newChild, password: e.target.value})} />
+                    </div>
+                    <div className="d-grid">
+                      <button className="btn btn-primary" onClick={handleAddChild}>Create Child Account</button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Emergency Contacts */}
               <div className="card mb-2">

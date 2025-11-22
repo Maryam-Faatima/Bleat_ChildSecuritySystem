@@ -5,7 +5,9 @@ import { useState, useEffect } from "react";
 import ChildCard from "@/app/components/ChildCard";
 import AlertCard from "@/app/components/AlertCard";
 import DeviceStatus from "@/app/components/DeviceStatus";
-import { mockChildren, mockAlerts, mockDevices } from "@/app/lib/mockData";
+import AuthenticationManager from '@/app/lib/AuthenticationManager';
+import { ApiService } from '@/lib/api';
+import { mockDevices } from "@/app/lib/mockData";
 import SafeZonesManager from "@/app/components/SafeZonesManager"; // Import the Safe Zones component
 import AOS from "aos";
 import "aos/dist/aos.css";
@@ -64,6 +66,8 @@ interface SafeZone {
 -------------------------- */
 export default function ParentDashboard() {
   const [acknowledgedAlerts, setAcknowledgedAlerts] = useState<number[]>([]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [childrenList, setChildrenList] = useState<Child[]>([]);
   const [activeTab, setActiveTab] = useState<
     "children" | "messages" | "reports" | "locations" | "sos"
   >("children");
@@ -140,9 +144,94 @@ export default function ParentDashboard() {
     AOS.init({ duration: 600 });
   }, []);
 
-  const unacknowledgedAlerts = mockAlerts.filter(
-    (alert: Alert) =>
-      !acknowledgedAlerts.includes(alert.alertId) && !alert.isAcknowledged
+  // Fetch real alerts for the logged-in parent
+  useEffect(() => {
+    const loadAlerts = async () => {
+      try {
+        const user = AuthenticationManager.getLoggedInUser();
+        if (!user) return;
+        const parentId = user.role === 'parent' ? user.userId : user.parentId;
+        if (!parentId) return;
+
+        const [serverAlerts, serverChildren] = await Promise.all([
+          ApiService.getAlerts(parentId),
+          ApiService.getChildren(parentId),
+        ]);
+
+        // Normalize children shape to match local `Child` interface
+        const normalizedChildren: Child[] = serverChildren.map((c: any) => ({
+          childId: c.id ?? c.childId ?? 0,
+          name: c.name,
+          age: c.age ?? 0,
+          status: 'active',
+        }));
+
+        // Map server alerts to local Alert shape using normalized children
+        const mappedAlerts: Alert[] = serverAlerts.map((a: any) => ({
+          alertId: a.alertId ?? a.sosId ?? 0,
+          childName: (() => {
+            const child = normalizedChildren.find((c: any) => c.childId === (a.childId ?? a.child));
+            return child ? child.name : `Child ${a.childId ?? ''}`;
+          })(),
+          type: a.type || 'SOS',
+          description: a.message || a.description || '',
+          timestamp: a.timestamp,
+          isAcknowledged: false,
+        }));
+
+        setChildrenList(normalizedChildren);
+        setAlerts(mappedAlerts);
+      } catch (e) {
+        console.error('Failed to load alerts/children', e);
+      }
+    };
+    loadAlerts();
+  }, []);
+
+  // Poll server for child locations when live-tracking enabled
+  useEffect(() => {
+    let interval: any = null;
+    const startPolling = () => {
+      interval = setInterval(async () => {
+        try {
+          const user = AuthenticationManager.getLoggedInUser();
+          if (!user) return;
+          const parentId = user.role === 'parent' ? user.userId : user.parentId;
+          if (!parentId) return;
+
+          const updatedLocations: ChildLocation[] = [];
+          for (const c of childrenList) {
+            try {
+              const loc = await ApiService.trackChildLocation(parentId, c.childId);
+              if (loc) {
+                const zoneStatus = isChildInSafeZone(loc.latitude, loc.longitude, safeZones);
+                updatedLocations.push({
+                  id: c.childId,
+                  name: c.name,
+                  latitude: loc.latitude,
+                  longitude: loc.longitude,
+                  status: zoneStatus.inZone ? 'Safe' : 'In Danger',
+                  inSafeZone: zoneStatus.inZone,
+                  currentZone: zoneStatus.zoneName,
+                });
+              }
+            } catch (e) {
+              // ignore per-child errors
+            }
+          }
+          if (updatedLocations.length > 0) setChildLocations(updatedLocations);
+        } catch (e) {
+          // ignore
+        }
+      }, 5000);
+    };
+
+    if (isLiveTracking && activeTab === 'locations') startPolling();
+    return () => { if (interval) clearInterval(interval); };
+  }, [childrenList, isLiveTracking, activeTab, safeZones]);
+
+  const unacknowledgedAlerts = alerts.filter(
+    (alert: Alert) => !acknowledgedAlerts.includes(alert.alertId) && !alert.isAcknowledged
   );
 
   const handleAcknowledgeAlert = (alertId: number) => {
@@ -216,6 +305,24 @@ export default function ParentDashboard() {
       zoom: 16,
     });
     setSelectedChild(child);
+  };
+
+  const handleSendSosToChild = async (childId: number) => {
+    try {
+      const user = AuthenticationManager.getLoggedInUser();
+      if (!user) { alert('Please login to send SOS'); return; }
+      const parentId = user.role === 'parent' ? user.userId : user.parentId;
+      if (!parentId) { alert('Parent not linked'); return; }
+      const resp = await ApiService.triggerSos(parentId, childId);
+      if (resp && resp.success) {
+        alert('SOS sent successfully');
+      } else {
+        alert('Failed to send SOS: ' + (resp?.message || 'unknown'));
+      }
+    } catch (error) {
+      console.error('Send SOS error', error);
+      alert('Failed to send SOS');
+    }
   };
 
   const handleSafeZonesUpdate = (zones: SafeZone[]) => {
@@ -321,6 +428,12 @@ export default function ParentDashboard() {
                   </button>
                 </li>
 
+                <li className="nav-item ms-2">
+                  <Link href="/parent/children?addChild=true">
+                    <button className="btn btn-sm btn-success">+ Add Child</button>
+                  </Link>
+                </li>
+
                 <li className="nav-item ms-3">
                   <Link href="/login" className="btn btn-outline-secondary">
                     Logout
@@ -338,7 +451,7 @@ export default function ParentDashboard() {
           ---------------------------------------- */}
           {activeTab === "children" && (
             <>
-              {mockChildren.map((child: Child) => (
+              {childrenList.map((child: Child) => (
                 <div
                   key={child.childId}
                   className="col-12 col-md-6 col-lg-4"
@@ -361,7 +474,7 @@ export default function ParentDashboard() {
             <div className="col-12">
               <h5 className="fw-bold mb-3">Messages</h5>
 
-              {mockChildren.map((child: Child) => (
+              {childrenList.map((child: Child) => (
                 <div key={child.childId} className="card mb-2 p-3">
                   <strong>{child.name}</strong>: You have 2 unread messages
                 </div>
@@ -377,7 +490,7 @@ export default function ParentDashboard() {
               <h5 className="fw-bold mb-3">Reports</h5>
 
               <div className="row row-cols-1 row-cols-md-2 g-3">
-                {mockChildren.map((child: Child) => (
+                {childrenList.map((child: Child) => (
                   <div key={child.childId} className="col">
                     <div className="card p-3">
                       <strong>{child.name}</strong>
@@ -619,11 +732,11 @@ export default function ParentDashboard() {
               </button>
 
               <div className="row row-cols-1 row-cols-md-2 g-3">
-                {mockChildren.map((child: Child) => (
+                {childrenList.map((child: Child) => (
                   <div key={child.childId} className="col">
                     <div className="card p-3 text-center">
                       <strong>{child.name}</strong>
-                      <button className="btn btn-outline-danger btn-sm mt-2">
+                      <button className="btn btn-outline-danger btn-sm mt-2" onClick={() => handleSendSosToChild(child.childId)}>
                         Send SOS to {child.name}
                       </button>
                     </div>

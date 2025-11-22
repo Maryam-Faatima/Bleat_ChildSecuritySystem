@@ -11,6 +11,7 @@ com\bleat\models\Alert.class
 com\bleat\models\TestDB.class
 com\bleat\controllers\ParentController$LocationDto.class
 com\bleat\controllers\AdminController$UserDto.class
+com\bleat\controllers\AdminController$ChildDto.class
 com\bleat\controllers\ParentController$DeleteChildResponse.class
 com\bleat\controllers\ParentController$DeleteEmergencyContactResponse.class
 com\bleat\controllers\ParentController$UpdateChildResponse.class
@@ -24,6 +25,7 @@ com\bleat\controllers\ParentController$AddChildResponse.class
 com\bleat\models\ChildDevice.class
 com\bleat\models\Message.class
 com\bleat\controllers\AuthController$SignupResponse.class
+com\bleat\services\AlertService.class
 com\bleat\controllers\ParentController$AddEmergencyContactResponse.class
 com\bleat\controllers\ParentController$ConfirmSafetyResponse.class
 com\bleat\models\SafeZone.class
@@ -49,6 +51,7 @@ com\bleat\controllers\ChildController$CancelSosResponse.class
 com\bleat\models\DBHandler.class
 com\bleat\models\Parent.class
 com\bleat\controllers\AdminController$UpdateParentRequest.class
+com\bleat\config\WebConfig.class
 com\bleat\controllers\AuthController$LoginResponse.class
 com\bleat\models\Child.class
 com\bleat\controllers\ParentController$SafeZoneDto.class
@@ -58,8 +61,11 @@ com\bleat\controllers\ParentController$CancelSosEmergencyResponse.class
 com\bleat\controllers\AuthController$SignupRequest.class
 com\bleat\app\App.class
 com\bleat\controllers\ParentController$EmergencyContactDto.class
+com\bleat\controllers\AdminController$AuthenticateChildRequest.class
+com\bleat\controllers\AdminController$AuthenticateChildResponse.class
 com\bleat\models\AuditLog.class
 com\bleat\controllers\ParentController$SendMessageResponse.class
+com\bleat\controllers\DiagnosticController.class
 com\bleat\BleatApplication.class
 com\bleat\controllers\ParentController$PairDeviceResponse.class
 com\bleat\services\SOSService.class
@@ -76,8 +82,11 @@ com\bleat\controllers\ChildController$AlertDto.class
 com\bleat\controllers\ParentController.class
 com\bleat\services\ISOSService.class
 com\bleat\models\EmergencyContact.class
+com\bleat\services\AlertService$SosAlert.class
 com\bleat\controllers\ChildController$SosAlertRequest.class
 com\bleat\controllers\ParentController$GenerateReportRequest.class
 com\bleat\services\AuthenticationManager.class
+com\bleat\services\PendingChildService.class
+com\bleat\controllers\AuthFallbackController.class
 com\bleat\controllers\ParentController$ChildDto.class
 com\bleat\models\DeviceStatus.class

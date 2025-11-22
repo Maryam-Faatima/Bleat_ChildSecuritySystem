@@ -7,14 +7,24 @@ public class Child {
     private int childId;
     private String name;
     private int age;
+    private int parentId;
+    private String username;
+    private String password;
     private String status;
     private ChildDevice device;
     private List<EmergencyContact> emergencyContacts = new ArrayList<>();
 
     public Child(int childId, String name, int age) {
+        this(childId, name, age, -1, null, null);
+    }
+
+    public Child(int childId, String name, int age, int parentId, String username, String password) {
         this.childId = childId;
         this.name = name;
         this.age = age;
+        this.parentId = parentId;
+        this.username = username;
+        this.password = password;
         this.status = "OK";
     }
 
@@ -32,7 +42,8 @@ public class Child {
     }
 
     public DeviceStatus getDeviceStatus() {
-        if (device == null) return DeviceStatus.UNKNOWN;
+        if (device == null)
+            return DeviceStatus.UNKNOWN;
         return device.getStatus();
     }
 
@@ -45,11 +56,37 @@ public class Child {
     }
 
     // getters
-    public int getChildId() { return childId; }
-    public String getName() { return name; }
-    public int getAge() { return age; }
-    public ChildDevice getDevice() { return device; }
-    public List<EmergencyContact> getEmergencyContacts() { return new ArrayList<>(emergencyContacts); }
+    public int getChildId() {
+        return childId;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public int getAge() {
+        return age;
+    }
+
+    public int getParentId() {
+        return parentId;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public ChildDevice getDevice() {
+        return device;
+    }
+
+    public List<EmergencyContact> getEmergencyContacts() {
+        return new ArrayList<>(emergencyContacts);
+    }
 
     @Override
     public String toString() {
