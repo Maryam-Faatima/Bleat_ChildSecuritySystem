@@ -24,6 +24,10 @@ class AuthenticationManager {
     return false;
   }
 
+  setLoggedInUser(user: { userId: number; role: 'parent' | 'admin'; email: string }): void {
+    this.loggedInUser = user;
+  }
+
   getLoggedInUser() {
     return this.loggedInUser;
   }

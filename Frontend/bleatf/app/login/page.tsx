@@ -2,11 +2,12 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { ApiService } from '@/lib/api';
 import AuthenticationManager from '@/app/lib/AuthenticationManager';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -16,16 +17,27 @@ export default function LoginPage() {
     setError('');
     setIsLoading(true);
 
-    setTimeout(() => {
-      if (AuthenticationManager.authenticate(email, password)) {
-        const user = AuthenticationManager.getLoggedInUser();
-        if (user?.role === 'parent') router.push('/parent/dashboard');
-        else if (user?.role === 'admin') router.push('/admin/dashboard');
+    try {
+      // Call backend API to authenticate
+      const response = await ApiService.login(name, password);
+      if (response.success) {
+        // Set authenticated user in AuthenticationManager
+        AuthenticationManager.setLoggedInUser({
+          userId: response.userId,
+          role: 'parent', // Assume parent for now; backend could return role
+          email: name,
+        });
+        // Route to parent dashboard
+        router.push('/parent/dashboard');
       } else {
-        setError('Invalid email or password. Try parent@example.com / password');
+        setError(response.message || 'Invalid name or password');
       }
+    } catch (err) {
+      console.error('Login error', err);
+      setError('Failed to log in. Please try again.');
+    } finally {
       setIsLoading(false);
-    }, 400);
+    }
   };
 
   return (
@@ -86,12 +98,12 @@ export default function LoginPage() {
           {/* Form */}
           <form onSubmit={handleLogin} className="w-100 d-flex flex-column align-items-center" style={{ gap: '0.75rem' }}>
             <div className="w-100">
-              <label className="form-label small">Email</label>
+              <label className="form-label small">Full Name</label>
               <input
-                name="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                name="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
                 className={`form-control form-control-lg ${error ? 'is-invalid' : ''}`}
                 disabled={isLoading}
               />
@@ -128,7 +140,7 @@ export default function LoginPage() {
           </form>
 
           <p className="text-center text-muted small mt-2">
-            Demo: parent@example.com / password
+            Use the name and password you signed up with.
           </p>
         </div>
       </div>

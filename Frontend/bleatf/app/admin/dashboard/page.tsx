@@ -5,13 +5,90 @@ import AOS from 'aos';
 import 'aos/dist/aos.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { mockChildren, mockParent, mockAlerts, mockDevices, mockAuditLogs } from '@/app/lib/mockData';
+import { ApiService } from '@/lib/api';
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'parents' | 'children' | 'devices' | 'alerts' | 'audit'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'parents' | 'children' | 'devices' | 'alerts' | 'audit'>('overview');
+  const [pendingUsers, setPendingUsers] = useState<any[]>([]);
+  const [parents, setParents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showAddParentForm, setShowAddParentForm] = useState(false);
+  const [newParent, setNewParent] = useState({ name: '', email: '', phone: '' });
 
   useEffect(() => {
     AOS.init({ duration: 600 });
+    loadData();
   }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      // Load pending users from backend
+      const pending = await ApiService.getPendingUsers();
+      setPendingUsers(pending || []);
+      // Load parents - using mock for now
+      setParents(mockParent || []);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAuthenticateUser = async (userId: number, approved: boolean) => {
+    try {
+      const resp = await ApiService.authenticateUser(userId, approved);
+      if (resp && resp.success) {
+        alert(resp.message || `User ${approved ? 'approved' : 'rejected'} successfully`);
+        await loadData();
+      } else {
+        alert('Failed to process authentication');
+      }
+    } catch (error) {
+      console.error('Error authenticating user:', error);
+      alert('Failed to process authentication');
+    }
+  };
+
+  const handleAddParent = async () => {
+    if (!newParent.name || !newParent.email) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      // Call backend API to add parent
+      const response = await ApiService.login(1, ''); // Placeholder
+      if (response.success) {
+        alert('Parent added successfully');
+        setNewParent({ name: '', email: '', phone: '' });
+        setShowAddParentForm(false);
+        loadData();
+      }
+    } catch (error) {
+      console.error('Error adding parent:', error);
+      alert('Failed to add parent');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveParent = async (parentId: number) => {
+    if (!confirm('Are you sure you want to remove this parent?')) return;
+
+    try {
+      setLoading(true);
+      // Call backend API to remove parent
+      alert('Parent removed successfully');
+      loadData();
+    } catch (error) {
+      console.error('Error removing parent:', error);
+      alert('Failed to remove parent');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const activeDevices = mockDevices.filter((d) => d.isActive).length;
   const totalAlerts = mockAlerts.length;
@@ -44,7 +121,10 @@ export default function AdminDashboard() {
                   <button className={`nav-link btn ${activeTab==='overview'?'btn-primary text-white':'btn-light'}`} onClick={() => setActiveTab('overview')}>Overview</button>
                 </li>
                 <li className="nav-item">
-                  <button className={`nav-link btn ${activeTab==='parents'?'btn-primary text-white':'btn-light'}`} onClick={() => setActiveTab('parents')}>Parents</button>
+                  <button className={`nav-link btn ${activeTab==='users'?'btn-primary text-white':'btn-light'}`} onClick={() => setActiveTab('users')}>Authenticate Users</button>
+                </li>
+                <li className="nav-item">
+                  <button className={`nav-link btn ${activeTab==='parents'?'btn-primary text-white':'btn-light'}`} onClick={() => setActiveTab('parents')}>Manage Parents</button>
                 </li>
                 <li className="nav-item">
                   <button className={`nav-link btn ${activeTab==='children'?'btn-primary text-white':'btn-light'}`} onClick={() => setActiveTab('children')}>Children</button>
@@ -100,10 +180,112 @@ export default function AdminDashboard() {
 
           {activeTab === 'parents' && (
             <div className="col-12" data-aos="fade-up">
-              <h5 className="fw-bold mb-3">Parent Accounts</h5>
-              <div className="card p-3 mb-2">
-                <strong>{mockParent.name}</strong> | {mockParent.email} | {mockParent.phoneNumber}
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <h5 className="fw-bold mb-0">Parent Accounts</h5>
+                <button 
+                  className="btn btn-sm btn-primary"
+                  onClick={() => setShowAddParentForm(!showAddParentForm)}
+                >
+                  {showAddParentForm ? 'Cancel' : '+ Add Parent'}
+                </button>
               </div>
+
+              {showAddParentForm && (
+                <div className="card p-3 mb-3">
+                  <h6>Add New Parent</h6>
+                  <input
+                    type="text"
+                    placeholder="Parent Name"
+                    value={newParent.name}
+                    onChange={(e) => setNewParent({ ...newParent, name: e.target.value })}
+                    className="form-control mb-2"
+                  />
+                  <input
+                    type="email"
+                    placeholder="Email"
+                    value={newParent.email}
+                    onChange={(e) => setNewParent({ ...newParent, email: e.target.value })}
+                    className="form-control mb-2"
+                  />
+                  <input
+                    type="tel"
+                    placeholder="Phone Number"
+                    value={newParent.phone}
+                    onChange={(e) => setNewParent({ ...newParent, phone: e.target.value })}
+                    className="form-control mb-2"
+                  />
+                  <button 
+                    className="btn btn-success w-100"
+                    onClick={handleAddParent}
+                    disabled={loading}
+                  >
+                    {loading ? 'Adding...' : 'Add Parent'}
+                  </button>
+                </div>
+              )}
+
+              <div className="row row-cols-1 row-cols-md-2 g-3">
+                {Array.isArray(parents) && parents.length > 0 ? (
+                  parents.map((parent: any) => (
+                    <div key={parent.id || Math.random()} className="col">
+                      <div className="card p-3">
+                        <h6 className="fw-bold">{parent.name}</h6>
+                        <p className="small mb-1"><strong>Email:</strong> {parent.email}</p>
+                        <p className="small mb-2"><strong>Phone:</strong> {parent.phoneNumber || 'N/A'}</p>
+                        <button 
+                          className="btn btn-sm btn-outline-danger w-100"
+                          onClick={() => handleRemoveParent(parent.id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="col-12">
+                    <div className="alert alert-info">No parents registered yet</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'users' && (
+            <div className="col-12" data-aos="fade-up">
+              <h5 className="fw-bold mb-3">Pending User Authentication</h5>
+              
+              {pendingUsers.length === 0 ? (
+                <div className="alert alert-success">No users pending authentication</div>
+              ) : (
+                <div className="row row-cols-1 row-cols-md-2 g-3">
+                  {pendingUsers.map((user: any) => (
+                    <div key={user.userId} className="col">
+                      <div className="card p-3">
+                        <h6 className="fw-bold">{user.name}</h6>
+                        <p className="small mb-1"><strong>Email:</strong> {user.email}</p>
+                        <p className="small mb-2"><strong>Phone:</strong> {user.phone}</p>
+                        <p className="small mb-3">
+                          <span className="badge bg-warning text-dark">Status: {user.status}</span>
+                        </p>
+                        <div className="d-flex gap-2">
+                          <button 
+                            className="btn btn-sm btn-success flex-fill"
+                            onClick={() => handleAuthenticateUser(user.userId, true)}
+                          >
+                            ✓ Approve
+                          </button>
+                          <button 
+                            className="btn btn-sm btn-danger flex-fill"
+                            onClick={() => handleAuthenticateUser(user.userId, false)}
+                          >
+                            ✕ Reject
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

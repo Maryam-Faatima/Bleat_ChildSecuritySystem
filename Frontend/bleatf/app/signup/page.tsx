@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ApiService } from '../../lib/api';
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -27,11 +28,23 @@ export default function SignUpPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (validateForm()) {
+    if (!validateForm()) return;
+    try {
+      // send signup to backend as PARENT role, backend will place in pending approvals
+      await ApiService.signup({
+        name: formData.name,
+        password: formData.password,
+        phoneNumber: formData.phoneNumber,
+        role: 'PARENT',
+      });
+      // show pending message instead of auto-login
       setSuccess(true);
-      setTimeout(() => router.push('/login'), 1400);
+      // do not auto-redirect; user must wait for admin approval
+    } catch (err) {
+      console.error('Signup failed', err);
+      setErrors({ ...errors, form: 'Failed to create account. Please try again.' });
     }
   };
 
@@ -90,7 +103,7 @@ export default function SignUpPage() {
 
               {success && (
                 <div className="alert alert-success text-center mb-2" role="alert">
-                  Account created — redirecting to login...
+                  Account created — pending admin approval. You will be able to log in once approved.
                 </div>
               )}
 

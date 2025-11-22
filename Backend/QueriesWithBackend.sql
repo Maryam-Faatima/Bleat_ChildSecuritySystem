@@ -16,5 +16,6 @@ SELECT * FROM Parents
 SELECT * FROM Children
 SELECT * FROM Devices
 SELECT * FROM Messages
+SELECT * FROM Locations
 
 DELETE FROM Messages WHERE ChildId IS NOT NULL
