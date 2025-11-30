@@ -27,6 +27,14 @@ public class Child {
         this.password = password;
         this.status = "OK";
     }
+    public Child(int childId,  int parentId,String name, int age) {
+        this.childId = childId;
+        this.name = name;
+        this.age = age;
+        this.parentId = parentId;
+        
+        this.status = "OK";
+    }
 
     public void updateDetails(String name, int age) {
         this.name = name;

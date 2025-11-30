@@ -34,6 +34,9 @@ export interface ChildDto {
   id: number;
   name: string;
   age: number;
+  deviceId?: number | null;
+  deviceStatus?: string | null;
+  deviceActive?: boolean;
 }
 
 export interface AddChildRequest {
@@ -107,6 +110,15 @@ export interface SendMessageResponse {
   message: string;
   messageId: number;
   sentAt: string;
+}
+
+export interface MessageDto {
+  messageId: number;
+  content?: string;
+  message?: string;
+  sentAt?: string;
+  timestamp?: string;
+  status?: string;
 }
 
 // Alert/SOS Interfaces
@@ -186,6 +198,13 @@ export interface GenerateReportResponse {
   reportId: number;
   reportType: string;
   generatedAt: string;
+}
+
+export interface ReportDto {
+  reportId: number;
+  reportType: string;
+  generatedOn: string;
+  data?: string | null;
 }
 
 // Admin interfaces
@@ -353,28 +372,64 @@ export class ApiService {
 
   // ---- LOCATION TRACKING ENDPOINTS ----
 
-  static async trackChildLocation(parentId: number, childId: number): Promise<LocationDto | null> {
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/parent/${parentId}/child/${childId}/track-location`,
-        {
-          method: 'GET',
-          headers: { 
-            'Accept': 'application/json'
-          },
-        }
-      );
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+ 
+static async trackChildLocation(parentId: number, childId: number): Promise<LocationDto | null> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/parent/${parentId}/child/${childId}/track-location`,
+      {
+        method: 'GET',
+        headers: { 
+          'Accept': 'application/json'
+        },
       }
-      
-      return await response.json();
-    } catch (error) {
-      console.error('Track location error:', error);
-      throw error;
+    );
+
+    // If device is not paired OR no location exists
+    if (response.status === 204) {
+      console.warn(`No location found for child ${childId}`);
+      return null;
     }
+
+    // Read raw text first to avoid JSON parse crashes
+    const raw = await response.text();
+
+    // Empty response body
+    if (!raw || raw.trim().length === 0) {
+      console.warn(`Empty location response for child ${childId}`);
+      return null;
+    }
+
+    let data: any;
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {
+      console.error("Invalid JSON from backend:", raw);
+      return null;
+    }
+
+    // Normalize DTO so frontend never fails
+    const latitude = data.latitude ?? data.lat ?? null;
+    const longitude = data.longitude ?? data.lng ?? null;
+
+    // If backend returned something but missing coords
+    if (latitude === null || longitude === null) {
+      console.warn(`Location data missing latitude/longitude for child ${childId}`);
+      return null;
+    }
+
+    return {
+      latitude,
+      longitude,
+      timestamp: data.timestamp ?? new Date().toISOString()
+    };
+
+  } catch (error) {
+    console.error('Track location error:', error);
+    return null; // <-- prevent frontend crash
   }
+}
+
 
   static async getLocationHistory(parentId: number, childId: number): Promise<LocationDto[]> {
     try {
@@ -398,7 +453,7 @@ export class ApiService {
       throw error;
     }
   }
-
+  
   // ---- DEVICE MANAGEMENT ENDPOINTS ----
 
   static async getDeviceStatus(parentId: number, childId: number): Promise<DeviceStatusDto | null> {
@@ -424,24 +479,40 @@ export class ApiService {
     }
   }
 
-  static async pairDevice(parentId: number, childId: number): Promise<PairDeviceResponse> {
+  static async  pairDevice(parentId: number, childId: number, deviceSerial: string)
+: Promise<PairDeviceResponse> {
     try {
       const response = await fetch(`${API_BASE_URL}/parent/${parentId}/child/${childId}/pair-device`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        body: JSON.stringify({ deviceId: '' }),
+        body: JSON.stringify({ deviceSerial }),
+
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       return await response.json();
     } catch (error) {
       console.error('Pair device error:', error);
+      throw error;
+    }
+  }
+
+  static async generatePairingCode(parentId: number): Promise<{ success: boolean; message?: string; code?: string } > {
+    try {
+      const response = await fetch(`${API_BASE_URL}/parent/${parentId}/pair-code/generate`, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Generate pairing code error:', error);
       throw error;
     }
   }
@@ -510,6 +581,62 @@ export class ApiService {
       return await response.json();
     } catch (error) {
       console.error('Send message error:', error);
+      throw error;
+    }
+  }
+
+  static async getMessagesWithChild(parentId: number, childId: number): Promise<MessageDto[]> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/parent/${parentId}/child/${childId}/messages`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Get messages with child error:', error);
+      throw error;
+    }
+  }
+
+  static async getMessagesForChild(childId: number): Promise<MessageDto[]> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/child/${childId}/messages`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Get messages for child error:', error);
+      throw error;
+    }
+  }
+
+  static async acknowledgeMessageAsChild(childId: number, messageId: number): Promise<{ success: boolean; message?: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/child/${childId}/messages/${messageId}/ack`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Acknowledge message as child error:', error);
+      throw error;
+    }
+  }
+
+  static async acknowledgeMessageAsParent(parentId: number, childId: number, messageId: number): Promise<{ success: boolean; message?: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/parent/${parentId}/child/${childId}/messages/${messageId}/ack`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Acknowledge message as parent error:', error);
       throw error;
     }
   }
@@ -704,6 +831,28 @@ export class ApiService {
     }
   }
 
+  static async updateEmergencyContact(parentId: number, childId: number, contactId: number, data: AddEmergencyContactRequest): Promise<AddEmergencyContactResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/parent/${parentId}/child/${childId}/emergency-contact/${contactId}/update`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(data),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Update emergency contact error:', error);
+      throw error;
+    }
+  }
+
   // ---- SAFE ZONES ENDPOINTS ----
 
   static async getSafeZones(parentId: number, childId: number): Promise<SafeZoneDto[]> {
@@ -795,6 +944,34 @@ export class ApiService {
     }
   }
 
+  static async listReports(parentId: number): Promise<ReportDto[]> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/parent/${parentId}/reports`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('List reports error:', error);
+      throw error;
+    }
+  }
+
+  static async downloadReport(parentId: number, reportId: number): Promise<ReportDto | null> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/parent/${parentId}/reports/${reportId}/download`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Download report error:', error);
+      throw error;
+    }
+  }
+
   // ---- ADMIN ENDPOINTS ----
 
   static async getPendingUsers(): Promise<UserDto[]> {
@@ -811,34 +988,8 @@ export class ApiService {
     }
   }
 
-  static async getPendingChildren(): Promise<any[]> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/admin/children/pending`, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' },
-      });
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('Get pending children error:', error);
-      throw error;
-    }
-  }
-
-  static async authenticateChild(childId: number, approve: boolean, reason?: string): Promise<any> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/admin/children/${childId}/authenticate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ approve, reason }),
-      });
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('Authenticate child error:', error);
-      throw error;
-    }
-  }
+  
+  
 
   // ---- ADMIN: Manage Parents ----
   static async getParents(): Promise<any[]> {
@@ -898,6 +1049,15 @@ export class ApiService {
       throw error;
     }
   }
+  static async getAuditLogs() {
+  const response = await fetch(`${API_BASE_URL}/admin/audit-logs`, {
+    method: 'GET',
+    headers: { 'Accept': 'application/json' }
+  });
+
+  if (!response.ok) throw new Error('Failed to load audit logs');
+  return await response.json();
+}
 
   static async authenticateUser(userId: number, approve: boolean, reason?: string): Promise<AuthenticateUserResponse> {
     try {

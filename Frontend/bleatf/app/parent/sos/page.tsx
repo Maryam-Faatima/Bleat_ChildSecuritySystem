@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { mockChildren, mockSOSHistory } from '@/app/lib/mockData';
 import { SOSService } from '@/app/lib/SOSService';
+import AuthenticationManager from '@/app/lib/AuthenticationManager';
+import { ApiService } from '@/lib/api';
 
 export default function SOSPage() {
   const [sosTriggered, setSosTriggered] = useState(false);
@@ -10,15 +12,37 @@ export default function SOSPage() {
   const [sosStatus, setSosStatus] = useState<'idle' | 'triggered' | 'resolved'>('idle');
   const [sosHistory, setSosHistory] = useState(mockSOSHistory);
 
-  const handleTriggerSOS = () => {
-    setSosStatus('triggered');
-    SOSService.sendSOS(
-      { userId: 1, name: 'Parent' },
-      { childId: selectedChild.childId, name: selectedChild.name }
-    );
-    
-    // Auto-resolve after demo
-    setTimeout(() => setSosStatus('resolved'), 3000);
+  const handleTriggerSOS = async () => {
+    try {
+      const user = AuthenticationManager.getLoggedInUser();
+      if (!user) return alert('Please login as a parent to trigger SOS');
+      setSosStatus('triggered');
+
+      // Call backend to notify emergency services
+      try {
+        const childId = selectedChild.childId ?? selectedChild.id;
+        const resp = await ApiService.triggerSos(user.userId, childId);
+        console.debug('triggerSos response', resp);
+      } catch (err) {
+        console.error('Failed to send SOS to emergency services', err);
+      }
+
+      // Notify emergency contacts on the client side (best-effort)
+      try {
+        const contacts = selectedChild?.emergencyContacts || [];
+        for (const contact of contacts) {
+          SOSService.notifyEmergencyServices(contact);
+        }
+      } catch (err) {
+        console.warn('Failed to notify emergency contacts locally', err);
+      }
+
+      // Auto-resolve after demo
+      setTimeout(() => setSosStatus('resolved'), 3000);
+    } catch (e) {
+      console.error('handleTriggerSOS error', e);
+      alert('Failed to trigger SOS');
+    }
   };
 
   const handleCancelSOS = () => {

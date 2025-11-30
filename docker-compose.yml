@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: bleat_postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-bleat}
+      POSTGRES_USER: ${POSTGRES_USER:-bleat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bleat_pass}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./Backend/src/main/resources/db/migration:/docker-entrypoint-initdb.d:ro
+
+volumes:
+  pgdata:

@@ -20,6 +20,7 @@ export default function Navbar() {
           <Link href="/login" style={linkStyle}>Login</Link>
           <Link href="/signup" style={linkStyle}>Signup</Link>
           <Link href="/parent/dashboard" style={linkStyle}>Parent</Link>
+          <Link href="/parent/reports" style={linkStyle}>Reports</Link>
           <Link href="/admin/dashboard" style={linkStyle}>Admin</Link>
           {user && user.role === 'parent' && (
             <Link href="/parent/children?addChild=true">

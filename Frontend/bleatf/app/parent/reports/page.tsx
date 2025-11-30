@@ -1,29 +1,72 @@
 'use client';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import LocationMap from '@/app/components/LocationMap';
-import { mockReports, mockChildren, mockDevices } from '@/app/lib/mockData';
+import { mockDevices } from '@/app/lib/mockData';
+import AuthenticationManager from '@/app/lib/AuthenticationManager';
+import { ApiService, GenerateReportRequest, ReportDto } from '@/lib/api';
 
 export default function ReportsPage() {
-  const [selectedReport, setSelectedReport] = useState<typeof mockReports[0] | null>(null);
+  const [selectedReport, setSelectedReport] = useState<ReportDto | null>(null);
   const [reportType, setReportType] = useState<'location' | 'alert' | 'activity'>('location');
-  const [selectedChild, setSelectedChild] = useState(mockChildren[0]);
+  const [selectedChild, setSelectedChild] = useState<any>(null);
+  const [children, setChildren] = useState<any[]>([]);
+  const [reports, setReports] = useState<ReportDto[]>([]);
 
-  const handleGenerateReport = () => {
-    const newReport = {
-      reportId: Date.now(),
-      generatedBy: 1,
-      generatedOn: new Date().toISOString(),
-      type: reportType === 'location' ? 'Location History' : reportType === 'alert' ? 'Alert Summary' : 'Activity Report',
-      childId: selectedChild.childId,
-      childName: selectedChild.name,
-      timeframe: 'Last 7 days',
-      locationCount: Math.floor(Math.random() * 20) + 5,
-    };
-    setSelectedReport(newReport);
+  const loadChildrenAndReports = async () => {
+    try {
+      const user = AuthenticationManager.getLoggedInUser();
+      const parentId = user ? (user.role === 'parent' ? user.userId : user.parentId) : 1;
+      const ch = await ApiService.getChildren(parentId);
+      setChildren(ch || []);
+      if (!selectedChild && ch && ch.length > 0) setSelectedChild(ch[0]);
+      const rlist = await ApiService.listReports(parentId);
+      setReports(rlist || []);
+    } catch (err) {
+      console.warn('Failed to load children/reports', err);
+    }
   };
 
-  const childDevice = mockDevices.find((d) => d.childId === selectedChild.childId);
+  const handleGenerateReport = async () => {
+    try {
+      if (!selectedChild || !(selectedChild?.childId ?? selectedChild?.id)) {
+        alert('Please select a child before generating a report');
+        return;
+      }
+      const user = AuthenticationManager.getLoggedInUser();
+      const parentId = user ? (user.role === 'parent' ? user.userId : user.parentId) : 1;
+      const payload: GenerateReportRequest = { reportType: reportType };
+      const resp = await ApiService.generateReport(parentId, payload);
+      if (resp && resp.success) {
+        // fetch fresh list and select the newly created report (do not rely on stale state)
+        const fresh = await ApiService.listReports(parentId);
+        setReports(fresh || []);
+        const created = (fresh || []).find(r => r.reportId === resp.reportId) || null;
+        if (created) {
+          // attempt to fetch the report content immediately so View/Download work without an extra click
+          try {
+            const full = await ApiService.downloadReport(parentId, created.reportId);
+            if (full) created.data = full.data ?? full.data; // ensure data prop exists
+          } catch (e) {
+            // ignore; content may be available later
+          }
+          setSelectedReport(created);
+        }
+      } else {
+        alert('Failed to generate report: ' + (resp?.message || 'unknown'));
+      }
+    } catch (err) {
+      console.error('Generate report failed', err);
+      alert('Failed to generate report');
+    }
+  };
+
+  const childDevice = mockDevices.find((d) => d.childId === (selectedChild?.childId ?? selectedChild?.id));
+
+  useEffect(() => {
+    loadChildrenAndReports();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div
@@ -60,9 +103,18 @@ export default function ReportsPage() {
                   <h6 className="card-title mb-2">Generate Report</h6>
                   <div className="mb-2">
                     <label className="form-label small">Select Child</label>
-                    <select className="form-select form-select-sm" value={selectedChild.childId} onChange={(e) => setSelectedChild(mockChildren.find((c) => c.childId === parseInt(e.target.value)) || selectedChild)}>
-                      {mockChildren.map((child) => (
-                        <option key={child.childId} value={child.childId}>{child.name}</option>
+                    <select
+                      className="form-select form-select-sm"
+                      value={selectedChild?.childId ?? selectedChild?.id ?? ''}
+                      onChange={(e) => {
+                        const id = parseInt(e.target.value || '0');
+                        const found = children.find((c: any) => (c.childId ?? c.id) === id);
+                        if (found) setSelectedChild(found);
+                      }}
+                    >
+                      <option value="">-- select --</option>
+                      {children.map((child) => (
+                        <option key={(child.childId ?? child.id)} value={child.childId ?? child.id}>{child.name}</option>
                       ))}
                     </select>
                   </div>
@@ -81,7 +133,7 @@ export default function ReportsPage() {
                       <label className="form-check-label" htmlFor="r-activity">Activity Report</label>
                     </div>
                   </div>
-                  <button onClick={handleGenerateReport} className="btn btn-primary btn-sm w-100">Generate</button>
+                  <button onClick={handleGenerateReport} className="btn btn-primary btn-sm w-100" disabled={!selectedChild?.childId && !selectedChild?.id}>Generate</button>
                 </div>
               </div>
 
@@ -89,9 +141,9 @@ export default function ReportsPage() {
                 <div className="card-body p-3">
                   <h6 className="card-title mb-2">Previous Reports</h6>
                   <div className="list-group list-group-flush">
-                    {mockReports.slice(0, 3).map((report) => (
+                    {reports.slice(0, 10).map((report) => (
                       <button key={report.reportId} onClick={() => setSelectedReport(report)} className="list-group-item list-group-item-action py-2 px-1 small">
-                        <div className="fw-semibold">{report.type}</div>
+                        <div className="fw-semibold">{report.reportType || 'Report'}</div>
                         <div className="text-muted small">{new Date(report.generatedOn).toLocaleDateString()}</div>
                       </button>
                     ))}
@@ -118,8 +170,53 @@ export default function ReportsPage() {
                         </div>
                       </div>
                       <div className="d-flex gap-1">
-                        <button className="btn btn-primary btn-sm flex-grow-1">PDF</button>
-                        <button className="btn btn-secondary btn-sm flex-grow-1">CSV</button>
+                        <button className="btn btn-primary btn-sm flex-grow-1" onClick={async () => {
+                          try {
+                            if (!selectedReport) return;
+                            // Use cached data if available
+                            if (selectedReport.data) {
+                              const w = window.open();
+                              if (w) w.document.write('<pre>' + selectedReport.data.replace(/</g,'&lt;') + '</pre>');
+                              return;
+                            }
+                            const user = AuthenticationManager.getLoggedInUser();
+                            const parentId = user ? (user.role === 'parent' ? user.userId : user.parentId) : 1;
+                            const r = await ApiService.downloadReport(parentId, selectedReport.reportId);
+                            if (r && r.data) {
+                              // cache locally
+                              selectedReport.data = r.data;
+                              setSelectedReport({ ...selectedReport });
+                              const w = window.open();
+                              if (w) w.document.write('<pre>' + r.data.replace(/</g,'&lt;') + '</pre>');
+                            } else alert('No report data');
+                          } catch (err) { console.error(err); alert('Download failed'); }
+                        }}>View</button>
+                        <button className="btn btn-secondary btn-sm flex-grow-1" onClick={async () => {
+                          try {
+                            if (!selectedReport) return;
+                            // Use cached data if available
+                            let data = selectedReport.data;
+                            if (!data) {
+                              const user = AuthenticationManager.getLoggedInUser();
+                              const parentId = user ? (user.role === 'parent' ? user.userId : user.parentId) : 1;
+                              const r = await ApiService.downloadReport(parentId, selectedReport.reportId);
+                              data = r?.data ?? null;
+                              if (data) {
+                                selectedReport.data = data;
+                                setSelectedReport({ ...selectedReport });
+                              }
+                            }
+                            if (data) {
+                              const blob = new Blob([data], { type: 'text/plain' });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = `report_${selectedReport.reportId}.txt`;
+                              a.click();
+                              URL.revokeObjectURL(url);
+                            } else alert('No report data');
+                          } catch (err) { console.error(err); alert('Download failed'); }
+                        }}>Download</button>
                       </div>
                     </div>
                   </div>

@@ -1,5 +1,6 @@
 package com.bleat.models;
 
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -9,6 +10,9 @@ public class Alert {
     private static final AtomicInteger ID_GEN = new AtomicInteger(1);
 
     private int alertId;
+    private int parentId;
+    private int childId;
+    private int deviceId;
     private String type;
     private String description;
     private LocalDateTime timestamp;
@@ -21,7 +25,29 @@ public class Alert {
         this.timestamp = LocalDateTime.now();
         this.isAcknowledged = false;
     }
+    public Alert(int alertid,int pid,int cid,int did,String type,String desc,Timestamp timestamp2,Boolean isack) {
+    	this.alertId=alertid;
+    	this.type = type;
+    	this.parentId = pid;
+    	   this.childId = cid;
+    	   this.deviceId = did;
+        this.description = desc;
+        this.timestamp = LocalDateTime.now();
+        this.isAcknowledged = false;
+    }
+    public Alert(int alertId, int parentId, int childId, Integer deviceId,
+            String type, String description,
+            LocalDateTime timestamp, boolean isAcknowledged) {
 
+   this.alertId = alertId;
+   this.parentId = parentId;
+   this.childId = childId;
+   this.deviceId = deviceId;
+   this.type = type;
+   this.description = description;
+   this.timestamp = timestamp;
+   this.isAcknowledged = isAcknowledged;
+}
     public void acknowledge() {
         this.isAcknowledged = true;
     }

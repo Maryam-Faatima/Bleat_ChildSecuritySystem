@@ -27,6 +27,7 @@ public abstract class User {
     }
 
     // getters
-    public int getUserId() { return userId; }
+    public int getUserId() { 
+        return userId; }
     public String getName() { return name; }
 }

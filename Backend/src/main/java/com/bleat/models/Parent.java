@@ -77,10 +77,21 @@ public class Parent extends User {
     }
 
     public Report generateReport(String type, String timeframe) {
-        Report r = new Report(this.userId, type + " (" + timeframe + ")");
+    // Use factory to create the appropriate report type
+    // Default to DAILY if type is not recognized
+    String reportType = type != null ? type.toUpperCase() : "DAILY";
+    
+    try {
+        Report r = ReportFactory.createReport(reportType, this.userId);
         // normally populate with real data
         return r;
+    } catch (IllegalArgumentException e) {
+        // If invalid type, default to daily report
+        System.out.println("Invalid report type '" + type + "', using DAILY report");
+        return ReportFactory.createReport("DAILY", this.userId);
     }
+}
+
 
     public DeviceStatus viewDeviceStatus(int deviceId) {
         for (Child c : children) {

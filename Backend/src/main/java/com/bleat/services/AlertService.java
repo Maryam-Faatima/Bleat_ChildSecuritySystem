@@ -1,16 +1,13 @@
 package com.bleat.services;
 
-import java.time.LocalDateTime;
-import java.util.*;
+import com.bleat.models.DBHandler;
+import java.util.List;
 
 public class AlertService {
 
     private static AlertService instance;
 
-    private Map<Integer, SosAlert> alerts = new HashMap<>();
-
-    private AlertService() {
-    }
+    private AlertService() {}
 
     public static synchronized AlertService getInstance() {
         if (instance == null)
@@ -18,21 +15,25 @@ public class AlertService {
         return instance;
     }
 
+    // DTO returned by DBHandler
     public static class SosAlert {
         public int sosId;
         public int childId;
         public int parentId;
+        public String type;
         public String message;
         public Double latitude;
         public Double longitude;
         public String timestamp;
-        public String status; // SENT, CANCELLED
+        public String status;
 
-        public SosAlert(int sosId, int childId, int parentId, String message, Double latitude, Double longitude,
-                String timestamp, String status) {
+        public SosAlert(int sosId, int childId, int parentId, String type, String message,
+                        Double latitude, Double longitude,
+                        String timestamp, String status) {
             this.sosId = sosId;
             this.childId = childId;
             this.parentId = parentId;
+            this.type = type;
             this.message = message;
             this.latitude = latitude;
             this.longitude = longitude;
@@ -41,23 +42,34 @@ public class AlertService {
         }
     }
 
+    // CREATE SOS ALERT (Type = SOS)
     public SosAlert addAlert(int childId, int parentId, String message, Double latitude, Double longitude) {
-        int id = com.bleat.models.DBHandler.createAlert(childId, parentId, message, latitude, longitude);
-        if (id <= 0)
-            return null;
-        // Fetch the stored alert (including timestamp) from DB
-        return com.bleat.models.DBHandler.getAlertById(id);
+    	int alertId = DBHandler.createAlert(parentId, childId, null, "SOS", message, latitude, longitude);
+
+        if (alertId <= 0) return null;
+        return DBHandler.getAlertById(alertId);
     }
 
+    // CREATE A TYPED ALERT (SafeZone, BatteryLow, DeviceOffline, etc)
+    public SosAlert addAlertWithType(int childId, int parentId, String type, String message,
+                                     Double latitude, Double longitude) {
+        int id = DBHandler.createAlert(parentId, childId, null, "SOS", message, latitude, longitude);
+        if (id <= 0) return null;
+        return DBHandler.getAlertById(id);
+    }
+
+    // CANCEL ALERT
     public boolean cancelAlert(int sosId) {
-        return com.bleat.models.DBHandler.cancelAlert(sosId);
+        return DBHandler.cancelAlert(sosId);
     }
 
+    // FETCH ALL ALERTS FOR PARENT
     public List<SosAlert> listAlertsByParent(int parentId) {
-        return com.bleat.models.DBHandler.listAlertsByParent(parentId);
+        return DBHandler.listAlertsByParent(parentId);
     }
 
+    // GET SINGLE ALERT
     public SosAlert getAlert(int sosId) {
-        return com.bleat.models.DBHandler.getAlertById(sosId);
+        return DBHandler.getAlertById(sosId);
     }
 }

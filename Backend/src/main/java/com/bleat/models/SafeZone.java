@@ -7,9 +7,9 @@ public class SafeZone {
     private double longitude;
     private double radius; // in meters
 
-    public SafeZone(int id, String name, double latitude, double longitude, double radius) {
+    public SafeZone(int id, double latitude, double longitude, double radius) {
         this.id = id;
-        this.name = name;
+       this.name="Zone"+id;
         this.latitude = latitude;
         this.longitude = longitude;
         this.radius = radius;

@@ -1,14 +1,142 @@
 'use client';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { mockChildren } from '@/app/lib/mockData';
 import EmergencyContact from '@/app/components/EmergencyContact';
 import SafeZone from '@/app/components/SafeZone';
 import { mockSafeZones } from '@/app/lib/mockData';
+import AuthenticationManager from '@/app/lib/AuthenticationManager';
+import { ApiService } from '@/lib/api';
 
 export default function ChildrenPage() {
+  const [children, setChildren] = useState<any[]>(mockChildren);
   const [selectedChild, setSelectedChild] = useState(mockChildren[0]);
   const [showAddEmergencyContact, setShowAddEmergencyContact] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const user = AuthenticationManager.getLoggedInUser();
+        if (!user) return;
+        const list = await ApiService.getChildren(user.userId);
+        if (list && list.length > 0) {
+          setChildren(list as any[]);
+          setSelectedChild(list[0]);
+        }
+      } catch (err) {
+        console.error('Failed to load children', err);
+      }
+    };
+    load();
+  }, []);
+
+  const refreshChildren = async () => {
+    try {
+      const user = AuthenticationManager.getLoggedInUser();
+      if (!user) return;
+      const list = await ApiService.getChildren(user.userId);
+      if (list) {
+        setChildren(list as any[]);
+        const selId = selectedChild ? (selectedChild.childId ?? (selectedChild as any).id) : null;
+        if (selId) {
+          const found = list.find((c: any) => (c.childId ?? c.id) === selId);
+          if (found) setSelectedChild(found as any);
+          else if (list.length > 0) setSelectedChild(list[0] as any);
+        } else if (list.length > 0) setSelectedChild(list[0] as any);
+      }
+    } catch (err) {
+      console.error('refreshChildren failed', err);
+    }
+  };
+
+  const handleEditProfile = async () => {
+    try {
+      if (!selectedChild) return alert('Select a child first');
+      const name = window.prompt('New child name', selectedChild.name) || selectedChild.name;
+      const ageStr = window.prompt('New age', String(selectedChild.age)) || String(selectedChild.age);
+      const age = parseInt(ageStr || String(selectedChild.age)) || selectedChild.age;
+      const user = AuthenticationManager.getLoggedInUser();
+      if (!user) return alert('Not logged in');
+      const childId = selectedChild.childId ?? (selectedChild as any).id;
+      const res = await ApiService.updateChild(user.userId, childId, { name, age });
+      if (res && res.success) {
+        alert('Child updated');
+        await refreshChildren();
+      } else {
+        alert('Failed to update child: ' + (res?.message || 'unknown'));
+      }
+    } catch (err) {
+      console.error('Edit profile failed', err);
+      alert('Edit failed');
+    }
+  };
+
+  const handlePairDevice = async () => {
+    try {
+      if (!selectedChild) return alert('Select a child first');
+      const user = AuthenticationManager.getLoggedInUser();
+      if (!user) return alert('Not logged in');
+      const serial = window.prompt('Enter device serial (leave blank to auto-generate)') || '';
+      const childId = selectedChild.childId ?? (selectedChild as any).id;
+      const r = await ApiService.pairDevice(user.userId, childId, serial);
+      alert(r?.message || 'Pair request sent');
+    } catch (err) {
+      console.error('Pair failed', err);
+      alert('Pair failed');
+    }
+  };
+
+  const handleReplaceDevice = async () => {
+    try {
+      if (!selectedChild) return alert('Select a child first');
+      const user = AuthenticationManager.getLoggedInUser();
+      if (!user) return alert('Not logged in');
+      const newSerial = window.prompt('Enter new device serial to replace current device');
+      if (!newSerial) return;
+      const childId = selectedChild.childId ?? (selectedChild as any).id;
+      const r = await ApiService.pairDevice(user.userId, childId, newSerial);
+      alert(r?.message || 'Replace request sent');
+      await refreshChildren();
+    } catch (err) {
+      console.error('Replace failed', err);
+      alert('Replace failed');
+    }
+  };
+
+  const handleDeactivateDevice = async () => {
+    try {
+      if (!selectedChild) return alert('Select a child first');
+      const confirm = window.confirm('Deactivate this child\'s device?');
+      if (!confirm) return;
+      const user = AuthenticationManager.getLoggedInUser();
+      if (!user) return alert('Not logged in');
+      const childId = selectedChild.childId ?? (selectedChild as any).id;
+      const r = await ApiService.deactivateDevice(user.userId, childId, true);
+      alert(r?.message || 'Device deactivated');
+      await refreshChildren();
+    } catch (err) {
+      console.error('Deactivate failed', err);
+      alert('Deactivate failed');
+    }
+  };
+
+  const handleViewLocation = async () => {
+    try {
+      if (!selectedChild) return alert('Select a child first');
+      const user = AuthenticationManager.getLoggedInUser();
+      if (!user) return alert('Not logged in');
+      const childId = selectedChild.childId ?? (selectedChild as any).id;
+      const loc = await ApiService.trackChildLocation(user.userId, childId);
+      if (loc) {
+        alert(`Location: ${loc.latitude}, ${loc.longitude} at ${loc.timestamp}`);
+      } else {
+        alert('No location available');
+      }
+    } catch (err) {
+      console.error('View location failed', err);
+      alert('Failed to get location');
+    }
+  };
 
   return (
     <div
@@ -44,18 +172,19 @@ export default function ChildrenPage() {
                 <div className="card-body p-3">
                   <h6 className="card-title mb-2">Children</h6>
                   <div className="list-group list-group-flush">
-                    {mockChildren.map((child) => (
+                    {children.map((child) => (
                       <button
-                        key={child.childId}
+                        key={child.childId || child.id}
                         onClick={() => setSelectedChild(child)}
                         className={`list-group-item list-group-item-action py-2 px-1 small ${
-                          selectedChild.childId === child.childId ? 'active' : ''
+                          (selectedChild && (selectedChild.childId || selectedChild.id)) === (child.childId || child.id) ? 'active' : ''
                         }`}
                       >
                         <div className="fw-semibold">{child.name}</div>
                         <div className="text-muted small">{child.age} years old</div>
                       </button>
                     ))}
+                    {children.length === 0 && <div className="text-muted small text-center py-2">No children yet</div>}
                   </div>
                 </div>
               </div>
@@ -79,7 +208,13 @@ export default function ChildrenPage() {
                       </div>
                     </div>
                   </div>
-                  <button className="btn btn-secondary btn-sm w-100 mt-2">Edit Profile</button>
+                  <div className="d-grid gap-2">
+                    <button className="btn btn-secondary btn-sm w-100 mt-2" onClick={() => handleEditProfile()}>Edit Profile</button>
+                    <button className="btn btn-outline-primary btn-sm w-100" onClick={() => handlePairDevice()}>Pair Device</button>
+                    <button className="btn btn-outline-warning btn-sm w-100" onClick={() => handleReplaceDevice()}>Replace Device</button>
+                    <button className="btn btn-outline-danger btn-sm w-100" onClick={() => handleDeactivateDevice()}>Deactivate Device</button>
+                    <button className="btn btn-outline-info btn-sm w-100" onClick={() => handleViewLocation()}>View Location</button>
+                  </div>
                 </div>
               </div>
 

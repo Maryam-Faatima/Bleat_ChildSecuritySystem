@@ -6,7 +6,9 @@ public class Location {
     private double latitude;
     private double longitude;
     private LocalDateTime timestamp;
-
+    public Location() {
+    	
+    }
     public Location(double latitude, double longitude) {
         this(latitude, longitude, LocalDateTime.now());
     }

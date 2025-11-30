@@ -2,7 +2,6 @@ package com.bleat.controllers;
 
 import org.springframework.web.bind.annotation.*;
 import com.bleat.models.*;
-import java.time.LocalDateTime;
 import java.util.*;
 
 @RestController
@@ -10,227 +9,190 @@ import java.util.*;
 @CrossOrigin(origins = "*")
 public class AdminController {
 
-    private static Map<Integer, Parent> parents = new HashMap<>();
-    private static Map<Integer, String> auditLogs = new HashMap<>();
-
-    // Public static method for AuthController to query parents
-    public static java.util.Optional<Parent> getParentsByNameAndPassword(String name, String password) {
-        return parents.values().stream()
-                .filter(p -> p.getName().equals(name) && p.login(name, password))
-                .findFirst();
-    }
-
-    // ===== USE CASE 1: Authenticate Users =====
+    // ==========================================================
+    //                GET PENDING PARENTS (SQL)
+    // ==========================================================
     @GetMapping("/users/pending")
     public List<UserDto> getPendingUsers() {
         List<UserDto> pending = new ArrayList<>();
-        for (Parent p : com.bleat.services.PendingUserService.getInstance().listPending()) {
-            pending.add(new UserDto(p.getUserId(), p.getName(), "PENDING"));
+
+        try {
+            List<com.bleat.models.User> dbPending = DBHandler.listPendingParentRequests();
+
+            for (com.bleat.models.User u : dbPending) {
+                pending.add(new UserDto(u.getUserId(), u.getName(), "PENDING"));
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
         }
+
         return pending;
     }
 
+    // ==========================================================
+    //           APPROVE OR REJECT A PARENT (SQL ONLY)
+    // ==========================================================
     @PostMapping("/users/{userId}/authenticate")
-    public AuthenticateUserResponse authenticateUser(@PathVariable int userId,
+    public AuthenticateUserResponse authenticateUser(
+            @PathVariable int userId,
             @RequestBody AuthenticateUserRequest request) {
+
         try {
-            if (!com.bleat.services.PendingUserService.getInstance().contains(userId)) {
-                return new AuthenticateUserResponse(false, "User not found in pending list", userId);
+            String status = request.approve ? "APPROVED" : "REJECTED";
+
+            boolean ok = request.approve
+                    ? DBHandler.approveParent(userId)
+                    : DBHandler.rejectParent(userId);
+
+            if (!ok) {
+                DBHandler.insertAuditLog(1, "Failed to authenticate parent: " + userId);
+                return new AuthenticateUserResponse(false, "Database update failed", userId);
             }
 
-            Parent pending = com.bleat.services.PendingUserService.getInstance().removePending(userId);
-            String status = request.approve ? "AUTHENTICATED" : "REJECTED";
-
-            // Log audit
-            recordAudit(userId, "User " + status + ": " + pending.getName());
-
-            if (request.approve) {
-                // Persist approved parent to the database store (parents map - acts as our DB)
-                parents.put(pending.getUserId(), pending);
-                // Also register in authentication manager and parent registry for redundancy
-                com.bleat.services.AuthenticationManager.getInstance().addUser(pending.getUserId(), pending.getName());
-                com.bleat.services.ParentRegistry.getInstance().addParent(pending);
-                recordAudit(pending.getUserId(), "User approved and persisted to database");
-            }
+            DBHandler.insertAuditLog(1, "User " + status + " (ParentId = " + userId + ")");
 
             return new AuthenticateUserResponse(true, "User " + status, userId);
+
         } catch (Exception e) {
             return new AuthenticateUserResponse(false, e.getMessage(), userId);
         }
     }
 
-    // ===== USE CASE: Authenticate Child Accounts =====
-    @GetMapping("/children/pending")
-    public List<ChildDto> getPendingChildren() {
-        List<ChildDto> pending = new ArrayList<>();
-        for (com.bleat.models.Child c : com.bleat.services.PendingChildService.getInstance().listPending()) {
-            pending.add(new ChildDto(c.getChildId(), c.getName(), c.getAge(), c.getParentId(), "PENDING"));
-        }
-        return pending;
-    }
-
-    @PostMapping("/children/{childId}/authenticate")
-    public AuthenticateChildResponse authenticateChild(@PathVariable int childId,
-            @RequestBody AuthenticateChildRequest request) {
-        try {
-            if (!com.bleat.services.PendingChildService.getInstance().contains(childId)) {
-                return new AuthenticateChildResponse(false, "Child not found in pending list", childId);
-            }
-
-            com.bleat.models.Child pending = com.bleat.services.PendingChildService.getInstance()
-                    .removePending(childId);
-            String status = request.approve ? "AUTHENTICATED" : "REJECTED";
-            recordAudit(childId, "Child " + status + ": " + pending.getName());
-
-            if (request.approve) {
-                // Add child to approved children in ParentController
-                ParentController.addApprovedChild(pending);
-                recordAudit(childId, "Child approved and added to parent records: " + pending.getName());
-            }
-
-            return new AuthenticateChildResponse(true, "Child " + status, childId);
-        } catch (Exception e) {
-            return new AuthenticateChildResponse(false, e.getMessage(), childId);
-        }
-    }
-
-    @GetMapping("/audit-logs")
-    public List<String> getAuditLogs() {
-        return new ArrayList<>(auditLogs.values());
-    }
-
-    // ===== USE CASE 2: Manage Parents =====
+    // ==========================================================
+    //                 LIST ALL PARENTS (SQL)
+    // ==========================================================
     @GetMapping("/parents")
     public List<ParentDto> getAllParents() {
-        List<ParentDto> parentList = new ArrayList<>();
-        for (Parent p : parents.values()) {
-            parentList.add(new ParentDto(p.getUserId(), p.getName(), p.getPhoneNumber(), "ACTIVE"));
+        List<ParentDto> list = new ArrayList<>();
+
+        try {
+            List<Map<String, Object>> rows = DBHandler.listAllParents();
+
+            for (Map<String, Object> r : rows) {
+                list.add(new ParentDto(
+                        (int) r.get("UserId"),
+                        (String) r.get("UserName"),
+                        (String) r.get("Phone"),
+                        ((boolean) r.get("IsAuthenticated")) ? "ACTIVE" : "PENDING"
+                ));
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
         }
-        return parentList;
+
+        return list;
     }
 
+    // ==========================================================
+    //                  ADD NEW PARENT (SQL)
+    // ==========================================================
     @PostMapping("/parents/add")
     public AddParentResponse addParent(@RequestBody AddParentRequest request) {
         try {
-            // Validate input
             if (request.name == null || request.name.isEmpty()) {
                 return new AddParentResponse(false, "Invalid name", -1);
             }
 
-            // Simple phone validation (digits, optional +, length 7-15)
-            if (request.phoneNumber != null && !request.phoneNumber.isEmpty()) {
-                if (!request.phoneNumber.matches("^[+]?\\d{7,15}$")) {
-                    return new AddParentResponse(false, "Invalid phone number format", -1);
-                }
+            if (request.phoneNumber != null &&
+                    !request.phoneNumber.matches("^[+]?\\d{7,15}$")) {
+                return new AddParentResponse(false, "Invalid phone format", -1);
             }
 
-            // Ensure username is unique across approved parents and pending list
-            boolean existsInParents = parents.values().stream()
-                    .anyMatch(p -> p.getName().equalsIgnoreCase(request.name));
-            boolean existsInPending = com.bleat.services.PendingUserService.getInstance().listPending().stream()
-                    .anyMatch(p -> p.getName().equalsIgnoreCase(request.name));
-            if (existsInParents || existsInPending) {
-                return new AddParentResponse(false, "Duplicate parent name", -1);
+            int userId = DBHandler.createUser(
+                    request.name,
+                    request.name + "@mail.com",
+                    request.phoneNumber,
+                    request.password,
+                    "PARENT"
+            );
+
+            if (userId <= 0) {
+                return new AddParentResponse(false, "Failed to create user", -1);
             }
 
-            int parentId = (int) (System.currentTimeMillis() % 100000);
-            Parent parent = new Parent(parentId, request.name, request.password, request.phoneNumber);
+            boolean parentRec = DBHandler.insertParentRecord(userId);
+            boolean authReq = DBHandler.insertParentAuthRequest(userId);
 
-            // Persist to in-memory "database"
-            parents.put(parentId, parent);
-
-            // Register with other services where appropriate
-            try {
-                com.bleat.services.AuthenticationManager.getInstance().addUser(parentId, parent.getName());
-                com.bleat.services.ParentRegistry.getInstance().addParent(parent);
-            } catch (Exception ex) {
-                // rollback in-memory add
-                parents.remove(parentId);
-                return new AddParentResponse(false, "Failed to persist parent: " + ex.getMessage(), -1);
+            if (!parentRec || !authReq) {
+                return new AddParentResponse(false, "Failed to create parent entry", -1);
             }
 
-            recordAudit(parentId, "Parent added: " + request.name);
+            DBHandler.insertAuditLog(1, "Parent added: " + request.name);
 
-            return new AddParentResponse(true, "Parent added successfully", parentId);
+            return new AddParentResponse(true, "Parent created", userId);
+
         } catch (Exception e) {
             return new AddParentResponse(false, e.getMessage(), -1);
         }
     }
 
+    // ==========================================================
+    //            UPDATE PARENT PHONE NUMBER (SQL)
+    // ==========================================================
     @PutMapping("/parents/{parentId}/update")
-    public UpdateParentResponse updateParent(@PathVariable int parentId, @RequestBody UpdateParentRequest request) {
+    public UpdateParentResponse updateParent(@PathVariable int parentId,
+                                             @RequestBody UpdateParentRequest request) {
+
         try {
-            if (!parents.containsKey(parentId)) {
-                return new UpdateParentResponse(false, "Parent not found", parentId);
-            }
-            Parent parent = parents.get(parentId);
-
-            // Only phone number updates are supported via this endpoint.
-            if (request.phoneNumber != null) {
-                if (!request.phoneNumber.isEmpty() && !request.phoneNumber.matches("^[+]?\\d{7,15}$")) {
-                    return new UpdateParentResponse(false, "Invalid phone number format", parentId);
-                }
-                // recreate parent with new phone number preserving name and password via
-                // reflection is not available
-                Parent updated = new Parent(parent.getUserId(), parent.getName(), "", request.phoneNumber);
-                parents.put(parentId, updated);
-                com.bleat.services.ParentRegistry.getInstance().addParent(updated);
-                recordAudit(parentId, "Parent updated: " + updated.getName());
-                return new UpdateParentResponse(true, "Parent updated successfully", parentId);
+            if (request.phoneNumber == null ||
+                    !request.phoneNumber.matches("^[+]?\\d{7,15}$")) {
+                return new UpdateParentResponse(false, "Invalid phone number", parentId);
             }
 
-            recordAudit(parentId, "Parent update called but no fields changed: " + parent.getName());
-            return new UpdateParentResponse(true, "No changes applied", parentId);
+            boolean ok = DBHandler.updateParentPhone(parentId, request.phoneNumber);
+
+            if (!ok) {
+                return new UpdateParentResponse(false, "Failed to update phone", parentId);
+            }
+
+            DBHandler.insertAuditLog(1, "Parent phone updated (ID = " + parentId + ")");
+
+            return new UpdateParentResponse(true, "Phone updated", parentId);
+
         } catch (Exception e) {
             return new UpdateParentResponse(false, e.getMessage(), parentId);
         }
     }
 
+    // ==========================================================
+    //                  DEACTIVATE A PARENT (SQL)
+    // ==========================================================
     @DeleteMapping("/parents/{parentId}/deactivate")
     public DeactivateParentResponse deactivateParent(@PathVariable int parentId) {
+
         try {
-            if (!parents.containsKey(parentId)) {
-                return new DeactivateParentResponse(false, "Parent not found", parentId);
+            boolean ok = DBHandler.deactivateParent(parentId);
+
+            if (!ok) {
+                return new DeactivateParentResponse(false, "Failed to deactivate parent", parentId);
             }
 
-            parents.remove(parentId);
-            recordAudit(parentId, "Parent deactivated");
+            DBHandler.insertAuditLog(1, "Parent deactivated (ID = " + parentId + ")");
 
-            return new DeactivateParentResponse(true, "Parent deactivated successfully", parentId);
+            return new DeactivateParentResponse(true, "Parent deactivated", parentId);
+
         } catch (Exception e) {
             return new DeactivateParentResponse(false, e.getMessage(), parentId);
         }
     }
 
-    // Helper method
-    private static void recordAudit(int userId, String action) {
-        int logId = (int) (System.currentTimeMillis() % 100000);
-        auditLogs.put(logId, "[" + LocalDateTime.now() + "] User " + userId + ": " + action);
+    // ==========================================================
+    //                      AUDIT LOGS
+    // ==========================================================
+    @GetMapping("/audit-logs")
+    public List<DBHandler.AuditLogRecord> getAuditLogs() {
+        return DBHandler.listAuditLogs();
     }
 
-    // Public helper to add an approved parent programmatically
-    public static void addApprovedParent(Parent parent) {
-        if (parent == null)
-            return;
-        parents.put(parent.getUserId(), parent);
-        try {
-            com.bleat.services.AuthenticationManager.getInstance().addUser(parent.getUserId(), parent.getName());
-            com.bleat.services.ParentRegistry.getInstance().addParent(parent);
-        } catch (Exception ex) {
-            // best-effort; if registration fails, remove from parents map
-            parents.remove(parent.getUserId());
-            return;
-        }
-        recordAudit(parent.getUserId(), "Parent added programmatically: " + parent.getName());
-    }
 
-    // ===== DTOs =====
 
+    // ==========================================================
+    //                    DTO CLASSES
+    // ==========================================================
     public static class UserDto {
         public int userId;
         public String name;
         public String status;
-
         public UserDto(int userId, String name, String status) {
             this.userId = userId;
             this.name = name;
@@ -247,7 +209,6 @@ public class AdminController {
         public boolean success;
         public String message;
         public int userId;
-
         public AuthenticateUserResponse(boolean success, String message, int userId) {
             this.success = success;
             this.message = message;
@@ -260,7 +221,6 @@ public class AdminController {
         public String name;
         public String phoneNumber;
         public String status;
-
         public ParentDto(int userId, String name, String phoneNumber, String status) {
             this.userId = userId;
             this.name = name;
@@ -279,7 +239,6 @@ public class AdminController {
         public boolean success;
         public String message;
         public int parentId;
-
         public AddParentResponse(boolean success, String message, int parentId) {
             this.success = success;
             this.message = message;
@@ -288,7 +247,6 @@ public class AdminController {
     }
 
     public static class UpdateParentRequest {
-        public String name;
         public String phoneNumber;
     }
 
@@ -296,7 +254,6 @@ public class AdminController {
         public boolean success;
         public String message;
         public int parentId;
-
         public UpdateParentResponse(boolean success, String message, int parentId) {
             this.success = success;
             this.message = message;
@@ -308,44 +265,10 @@ public class AdminController {
         public boolean success;
         public String message;
         public int parentId;
-
         public DeactivateParentResponse(boolean success, String message, int parentId) {
             this.success = success;
             this.message = message;
             this.parentId = parentId;
-        }
-    }
-
-    public static class ChildDto {
-        public int childId;
-        public String name;
-        public int age;
-        public int parentId;
-        public String status;
-
-        public ChildDto(int childId, String name, int age, int parentId, String status) {
-            this.childId = childId;
-            this.name = name;
-            this.age = age;
-            this.parentId = parentId;
-            this.status = status;
-        }
-    }
-
-    public static class AuthenticateChildRequest {
-        public boolean approve;
-        public String reason;
-    }
-
-    public static class AuthenticateChildResponse {
-        public boolean success;
-        public String message;
-        public int childId;
-
-        public AuthenticateChildResponse(boolean success, String message, int childId) {
-            this.success = success;
-            this.message = message;
-            this.childId = childId;
         }
     }
 }

@@ -2,9 +2,9 @@ package com.bleat.controllers;
 
 import org.springframework.web.bind.annotation.*;
 import com.bleat.models.*;
+import com.bleat.models.DBHandler.LocationRecord;
 import com.bleat.services.AlertService;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+
 import java.util.*;
 
 @RestController
@@ -12,107 +12,153 @@ import java.util.*;
 @CrossOrigin(origins = "*")
 public class ChildController {
 
-    private static Map<Integer, Alert> alerts = new HashMap<>();
-    private static Map<Integer, Location> locations = new HashMap<>();
+    // =============================================================
+    //                USE CASE 1: SEND SOS ALERT
+    // =============================================================
 
-    // ===== USE CASE 1: Send SOS Alert =====
     @PostMapping("/{childId}/sos")
-    public SosAlertResponse sendSosAlert(@PathVariable int childId, @RequestBody SosAlertRequest request) {
+    public SosAlertResponse sendSosAlert(
+            @PathVariable int childId,
+            @RequestBody SosAlertRequest request) {
+
         try {
-            // find child and linked parent
-            Child child = ParentController.getChildById(childId);
+            Child child = DBHandler.getChildById(childId);
             if (child == null)
                 return new SosAlertResponse(false, "Child not found", -1, null);
+
             int parentId = child.getParentId();
 
-            AlertService.SosAlert a = AlertService.getInstance().addAlert(childId, parentId,
-                    request != null ? request.message : null, request != null ? request.latitude : null,
-                    request != null ? request.longitude : null);
-            return new SosAlertResponse(true, "SOS alert sent to parents and emergency contacts", a.sosId, a.timestamp);
+            AlertService.SosAlert a =
+                    AlertService.getInstance().addAlert(
+                            childId,
+                            parentId,
+                            request != null ? request.message : null,
+                            request != null ? request.latitude : null,
+                            request != null ? request.longitude : null
+                    );
+
+            return new SosAlertResponse(
+                    true,
+                    "SOS alert sent",
+                    a.sosId,
+                    a.timestamp
+            );
+
         } catch (Exception e) {
             return new SosAlertResponse(false, e.getMessage(), -1, null);
         }
     }
 
+    // SOS HISTORY (from DB)
     @GetMapping("/{childId}/sos/history")
-    public List<AlertDto> getSosHistory(@PathVariable int childId) {
-        List<AlertDto> history = new ArrayList<>();
-        for (Alert alert : alerts.values()) {
-            if (alert.getType().equals("SOS")) {
-                history.add(new AlertDto(alert.getAlertId(), alert.getType(), alert.getDescription(),
-                        alert.getTimestamp().toString()));
-            }
-        }
-        return history;
+    public List<Alert> getSosHistory(@PathVariable int childId) {
+        return DBHandler.getSosAlertHistory(childId);
     }
 
+    // CANCEL SOS ALERT
     @PostMapping("/{childId}/sos/{alertId}/cancel")
     public CancelSosResponse cancelSos(@PathVariable int childId, @PathVariable int alertId) {
         try {
-            AlertService.SosAlert a = AlertService.getInstance().getAlert(alertId);
-            if (a == null || a.childId != childId) {
-                return new CancelSosResponse(false, "Alert not found", -1);
-            }
-            boolean ok = AlertService.getInstance().cancelAlert(alertId);
+            boolean ok = DBHandler.cancelAlert(alertId);
             if (!ok)
-                return new CancelSosResponse(false, "Failed to cancel alert", -1);
-            return new CancelSosResponse(true, "SOS alert cancelled and parents notified", alertId);
+                return new CancelSosResponse(false, "Alert not found or cannot be cancelled", alertId);
+
+            return new CancelSosResponse(true, "SOS alert cancelled", alertId);
         } catch (Exception e) {
-            return new CancelSosResponse(false, e.getMessage(), -1);
+            return new CancelSosResponse(false, e.getMessage(), alertId);
         }
     }
 
-    // ===== USE CASE 2: Share Location =====
-    @PostMapping("/{childId}/location/share")
-    public ShareLocationResponse shareLocation(@PathVariable int childId, @RequestBody LocationShareRequest request) {
-        try {
-            int locId = (int) (System.currentTimeMillis() % 100000);
-            Location loc = new Location(request.latitude, request.longitude);
-            locations.put(locId, loc);
+    // =============================================================
+    //                 USE CASE 2: SHARE LOCATION
+    // =============================================================
 
-            // Update in-memory child device if linked
-            Child child = ParentController.getChildById(childId);
-            if (child != null && child.getDevice() != null) {
-                child.getDevice().updateLocation(loc);
-                // Persist to DB if possible using deviceId
-                try {
-                    int deviceId = child.getDevice().getDeviceId();
-                    com.bleat.models.DBHandler.storeLocationData(deviceId, request.latitude, request.longitude);
-                } catch (Exception ex) {
-                    // best-effort persistence; log and continue
-                    System.out.println("Failed to persist location to DB: " + ex.getMessage());
-                }
+    @PostMapping("/{childId}/location/share")
+    public ShareLocationResponse shareLocation(
+            @PathVariable int childId,
+            @RequestBody LocationShareRequest req) {
+
+        try {
+            Child child = DBHandler.getChildById(childId);
+            if (child == null)
+                return new ShareLocationResponse(false, "Child not found", -1, 0, 0, null);
+
+            Integer deviceId = DBHandler.getDeviceIdForChild(childId);
+            if (deviceId == null)
+                return new ShareLocationResponse(false, "Child has no paired device", -1, 0, 0, null);
+
+            int locId = DBHandler.insertLocation(deviceId, req.latitude, req.longitude);
+
+            // safe zone calculation
+            List<SafeZone> zones = DBHandler.getSafeZonesForChild(childId);
+            boolean inZone = DBHandler.isInsideAnySafeZone(req.latitude, req.longitude, zones);
+
+            // trigger safe-zone exit alert
+            Boolean wasInZone = DBHandler.getChildSafeZoneState(childId);
+            if ((wasInZone == null || wasInZone) && !inZone) {
+                DBHandler.saveSafeZoneExitAlert(childId);
             }
 
-            return new ShareLocationResponse(true, "Location shared successfully", locId, loc.getLatitude(),
-                    loc.getLongitude(), loc.getTimestamp().toString());
+            DBHandler.updateChildSafeZoneState(childId, inZone);
+
+            return new ShareLocationResponse(
+                    true,
+                    "Location shared",
+                    locId,
+                    req.latitude,
+                    req.longitude,
+                    new java.util.Date().toString()
+            );
+
         } catch (Exception e) {
             return new ShareLocationResponse(false, e.getMessage(), -1, 0, 0, null);
         }
     }
 
+    // LAST KNOWN LOCATION
     @GetMapping("/{childId}/location/last-known")
     public LocationDto getLastKnownLocation(@PathVariable int childId) {
-        // In real implementation, fetch from database
-        Location lastLoc = locations.values().stream()
-                .reduce((first, second) -> second).orElse(null);
-
-        if (lastLoc != null) {
-            return new LocationDto(lastLoc);
-        }
-        return null;
+    	Location last = DBHandler.getLastLocation(childId);
+    	if (last != null) {
+    	    return new LocationDto(last);
+    	}
+    	return null;
     }
 
+    
+    // LOCATION HISTORY
     @GetMapping("/{childId}/location/history")
-    public List<LocationDto> getLocationHistory(@PathVariable int childId) {
-        List<LocationDto> history = new ArrayList<>();
-        for (Location loc : locations.values()) {
-            history.add(new LocationDto(loc));
-        }
-        return history;
+    public List<LocationRecord> getLocationHistory(@PathVariable int childId) {
+    	
+        return DBHandler.getLocationHistory(childId);
     }
 
-    // ===== Request/Response DTOs =====
+    // =============================================================
+    //         USE CASE 6: CHILD VIEW MESSAGES FROM PARENT
+    // =============================================================
+
+    @GetMapping("/{childId}/messages")
+    public List<DBHandler.MessageDto> getMessagesForChild(@PathVariable int childId) {
+        try {
+            return DBHandler.getMessagesForChild(childId);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Collections.emptyList();
+        }
+    }
+
+    @PostMapping("/{childId}/messages/{messageId}/ack")
+    public AcknowledgeResponse acknowledgeMessageAsChild(
+            @PathVariable int childId,
+            @PathVariable int messageId) {
+
+        boolean ok = DBHandler.acknowledgeMessageByChild(messageId);
+        return new AcknowledgeResponse(ok, ok ? "Acknowledged" : "Failed", messageId);
+    }
+
+    // =============================================================
+    // DTOs
+    // =============================================================
 
     public static class SosAlertRequest {
         public String message;
@@ -125,38 +171,22 @@ public class ChildController {
         public String message;
         public int alertId;
         public String timestamp;
-
-        public SosAlertResponse(boolean success, String message, int alertId, String timestamp) {
-            this.success = success;
-            this.message = message;
-            this.alertId = alertId;
-            this.timestamp = timestamp;
+        public SosAlertResponse(boolean s, String m, int i, String t) {
+            success = s; message = m; alertId = i; timestamp = t;
         }
     }
 
     public static class AlertDto {
-        public int id;
-        public String type;
-        public String description;
-        public String timestamp;
-
-        public AlertDto(int id, String type, String description, String timestamp) {
-            this.id = id;
-            this.type = type;
-            this.description = description;
-            this.timestamp = timestamp;
+        public int id; public String type; public String description; public String timestamp;
+        public AlertDto(int id, String t, String d, String ts) {
+            this.id=id; type=t; description=d; timestamp=ts;
         }
     }
 
     public static class CancelSosResponse {
-        public boolean success;
-        public String message;
-        public int alertId;
-
-        public CancelSosResponse(boolean success, String message, int alertId) {
-            this.success = success;
-            this.message = message;
-            this.alertId = alertId;
+        public boolean success; public String message; public int alertId;
+        public CancelSosResponse(boolean s, String m, int i) {
+            success=s; message=m; alertId=i;
         }
     }
 
@@ -166,21 +196,26 @@ public class ChildController {
     }
 
     public static class ShareLocationResponse {
-        public boolean success;
-        public String message;
-        public int locationId;
-        public double latitude;
-        public double longitude;
+        public boolean success; public String message;
+        public int locationId; public double latitude; public double longitude;
         public String timestamp;
+        public ShareLocationResponse(
+                boolean s, String m, int lid, double lat, double lon, String ts) {
+            success=s; message=m; locationId=lid; latitude=lat; longitude=lon; timestamp=ts;
+        }
+    }
 
-        public ShareLocationResponse(boolean success, String message, int locationId, double latitude, double longitude,
-                String timestamp) {
-            this.success = success;
-            this.message = message;
-            this.locationId = locationId;
-            this.latitude = latitude;
-            this.longitude = longitude;
-            this.timestamp = timestamp;
+    public static class MessageDto {
+        public int messageId; public String content; public String sentAt; public String status;
+        public MessageDto(int id,String c,String s,String st){
+            messageId=id; content=c; sentAt=s; status=st;
+        }
+    }
+
+    public static class AcknowledgeResponse {
+        public boolean success; public String message; public int messageId;
+        public AcknowledgeResponse(boolean s,String m,int id){
+            success=s; message=m; messageId=id;
         }
     }
 }

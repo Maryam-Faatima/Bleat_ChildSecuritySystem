@@ -1,6 +1,8 @@
 // components/SafeZonesManager.tsx
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import AuthenticationManager from '@/app/lib/AuthenticationManager';
+import { ApiService } from '@/lib/api';
 
 // Define TypeScript interfaces
 interface SafeZone {
@@ -29,35 +31,110 @@ const SafeZonesManager: React.FC<SafeZonesManagerProps> = ({
     radius: 500
   });
 
-  const addSafeZone = () => {
+  useEffect(() => {
+    // Load zones from server if authenticated
+    const user = AuthenticationManager.getLoggedInUser();
+    if (!user) return;
+    const parentId = (user as any).parentId ?? (user as any).userId ?? null;
+    if (!parentId) return;
+
+    // If logged in as a parent, fetch all children and aggregate safe zones
+    const loadZones = async () => {
+      try {
+        const children = await ApiService.getChildren(parentId);
+        const zonesByChildPromises = children.map((c: any) => ApiService.getSafeZones(parentId, c.id ?? c.childId));
+        const zonesByChild = await Promise.all(zonesByChildPromises);
+        // flatten and dedupe by lat/lon+radius+name
+        const flat: any[] = ([] as any[]).concat(...zonesByChild.map((z: any) => z || []));
+        const uniqKey = (z: any) => `${z.latitude}:${z.longitude}:${z.radius}:${z.name || ''}`;
+        const seen = new Set<string>();
+        const mapped: SafeZone[] = [];
+        for (const z of flat) {
+          const key = uniqKey(z);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          mapped.push({
+            id: z.id || z.safeZoneId || Date.now(),
+            name: z.name || z.zoneName || 'Zone',
+            latitude: z.latitude,
+            longitude: z.longitude,
+            radius: z.radius || z.radiusMeters || 500,
+            color: '#00ff00'
+          });
+        }
+        setSafeZones(mapped);
+        onSafeZonesUpdate(mapped);
+      } catch (err) {
+        console.error('Failed to load children or aggregate safe zones', err);
+      }
+    };
+
+    loadZones();
+  }, []);
+
+  const addSafeZone = async () => {
     if (!newZone.name || !newZone.latitude || !newZone.longitude) {
       alert('Please fill all fields');
       return;
     }
+    const lat = parseFloat(newZone.latitude);
+    const lon = parseFloat(newZone.longitude);
+    const rad = parseInt(newZone.radius.toString());
 
-    const zone: SafeZone = {
-      id: Date.now(),
-      name: newZone.name,
-      latitude: parseFloat(newZone.latitude),
-      longitude: parseFloat(newZone.longitude),
-      radius: parseInt(newZone.radius.toString()),
-      color: '#00ff00'
-    };
+    const user = AuthenticationManager.getLoggedInUser();
+    if (!user) return alert('Please login as parent to add safe zone');
+    const parentId = (user as any).parentId ?? (user as any).userId ?? null;
+    if (!parentId) return alert('Parent not set');
 
-    const updatedZones = [...safeZones, zone];
-    setSafeZones(updatedZones);
-    onSafeZonesUpdate(updatedZones);
-    
-    // Reset form
-    setNewZone({
-      name: '',
-      latitude: '',
-      longitude: '',
-      radius: 500
-    });
+    try {
+      // Fetch children and apply the safe zone to each child so it's effectively 'global' for parent's children
+      const children = await ApiService.getChildren(parentId);
+      if (!children || children.length === 0) {
+        alert('No children found for this parent. Add a child first.');
+        return;
+      }
+
+      const addPromises = children.map((c: any) => ApiService.addSafeZone(parentId, c.id ?? c.childId, { name: newZone.name, latitude: lat, longitude: lon, radius: rad }));
+      const results = await Promise.allSettled(addPromises);
+      const successes = results.filter(r => r.status === 'fulfilled').length;
+      if (successes === 0) {
+        alert('Failed to add safe zone for any child');
+        return;
+      }
+
+      // Show zone once in UI (even though added per-child on backend)
+      const zone: SafeZone = {
+        id: Date.now(),
+        name: newZone.name,
+        latitude: lat,
+        longitude: lon,
+        radius: rad,
+        color: '#00ff00'
+      };
+      const updatedZones = [...safeZones, zone];
+      setSafeZones(updatedZones);
+      onSafeZonesUpdate(updatedZones);
+      setNewZone({ name: '', latitude: '', longitude: '', radius: 500 });
+      alert(`Safe zone added for ${successes}/${children.length} children`);
+    } catch (err) {
+      console.error('Add safe zone failed', err);
+      alert('Failed to add safe zone');
+    }
   };
 
-  const removeSafeZone = (zoneId: number) => {
+  const removeSafeZone = async (zoneId: number) => {
+    const user = AuthenticationManager.getLoggedInUser();
+    if (!user) return alert('Please login as parent to delete safe zone');
+    const parentId = (user as any).parentId ?? (user as any).userId ?? null;
+    if (!parentId) return alert('Parent not set');
+    // Delete zone for all children
+    try {
+      const children = await ApiService.getChildren(parentId);
+      const delPromises = children.map((c: any) => ApiService.deleteSafeZone(parentId, c.id ?? c.childId, zoneId).catch(() => null));
+      await Promise.all(delPromises);
+    } catch (err) {
+      console.warn('Failed deleting zone for some children', err);
+    }
     const updatedZones = safeZones.filter(zone => zone.id !== zoneId);
     setSafeZones(updatedZones);
     onSafeZonesUpdate(updatedZones);

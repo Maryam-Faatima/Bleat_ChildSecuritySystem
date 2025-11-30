@@ -4,11 +4,12 @@ import { useState, useEffect } from 'react';
 import AOS from 'aos';
 import 'aos/dist/aos.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
-import { mockChildren, mockParent, mockAlerts, mockDevices, mockAuditLogs } from '@/app/lib/mockData';
 import { ApiService } from '@/lib/api';
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'parents' | 'children' | 'devices' | 'alerts' | 'audit'>('overview');
+  const [activeTab, setActiveTab] = useState<'users' | 'parents' | 'audit'>('users');
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+
   const [pendingUsers, setPendingUsers] = useState<any[]>([]);
   const [pendingChildren, setPendingChildren] = useState<any[]>([]);
   const [parents, setParents] = useState<any[]>([]);
@@ -27,21 +28,20 @@ export default function AdminDashboard() {
       // Load pending users from backend
       const pending = await ApiService.getPendingUsers();
       setPendingUsers(pending || []);
-        // Load pending children too
-        try {
-          const pchildren = await ApiService.getPendingChildren();
-          setPendingChildren(pchildren || []);
-        } catch (err) {
-          console.warn('Failed to load pending children', err);
-          setPendingChildren([]);
-        }
-      // Load parents from backend
+        
       try {
         const backendParents = await ApiService.getParents();
         setParents(backendParents || []);
       } catch (err) {
         console.warn('Failed to load parents from API, using mock data', err);
-        setParents(mockParent || []);
+      }
+
+      try {
+        const logs = await ApiService.getAuditLogs();
+        setAuditLogs(logs || []);
+
+      } catch (err) {
+        console.warn('Failed to load parents from Audit Logs', err);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -65,21 +65,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleAuthenticateChild = async (childId: number, approved: boolean) => {
-    try {
-      const resp = await ApiService.authenticateChild(childId, approved);
-      if (resp && resp.success) {
-        alert(resp.message || `Child ${approved ? 'approved' : 'rejected'} successfully`);
-        await loadData();
-      } else {
-        alert('Failed to process child authentication');
-      }
-    } catch (error) {
-      console.error('Error authenticating child:', error);
-      alert('Failed to process child authentication');
-    }
-  };
-
+  
   const handleAddParent = async () => {
     if (!newParent.name || !newParent.email) {
       alert('Please fill in all required fields');
@@ -124,93 +110,84 @@ export default function AdminDashboard() {
     }
   };
 
-  const activeDevices = mockDevices.filter((d) => d.isActive).length;
-  const totalAlerts = mockAlerts.length;
-  const recentAuditLogs = mockAuditLogs.slice(0, 5);
+  const recentAuditLogs = auditLogs.slice(0, 5);
+
 
   return (
     <div
       style={{
-        minHeight: '100vh',
-        width: '100vw',
-        backgroundImage: 'linear-gradient(135deg, var(--color-primary), var(--color-secondary))',
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        width: "100vw",
+        backgroundImage:
+          'linear-gradient(135deg, var(--color-primary), var(--color-secondary))',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
-       // padding: '1rem',
+        minHeight: '100vh',
       }}
     >
-      <div className="card shadow rounded-4 w-100" style={{ maxWidth: 1200, borderRadius: 18, padding: '1.5rem' }}>
-        
+      <div
+        className="card shadow rounded-4 w-100"
+        style={{ maxWidth: 900, borderRadius: 18, padding: '1.5rem', maxHeight: '95vh', overflowY: 'auto' }}
+      >
         {/* Navbar */}
         <nav className="navbar navbar-expand-lg navbar-light bg-light rounded-3 mb-4">
-          <div className="container-fluid">
-            <span className="navbar-brand fw-bold">Admin Dashboard</span>
-            <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-              <span className="navbar-toggler-icon"></span>
-            </button>
-            <div className="collapse navbar-collapse" id="navbarNav">
-              <ul className="navbar-nav ms-auto">
-                <li className="nav-item">
-                  <button className={`nav-link btn ${activeTab==='overview'?'btn-primary text-white':'btn-light'}`} onClick={() => setActiveTab('overview')}>Overview</button>
-                </li>
-                <li className="nav-item">
-                  <button className={`nav-link btn ${activeTab==='users'?'btn-primary text-white':'btn-light'}`} onClick={() => setActiveTab('users')}>Authenticate Users</button>
-                </li>
-                <li className="nav-item">
-                  <button className={`nav-link btn ${activeTab==='parents'?'btn-primary text-white':'btn-light'}`} onClick={() => setActiveTab('parents')}>Manage Parents</button>
-                </li>
-                <li className="nav-item">
-                  <button className={`nav-link btn ${activeTab==='children'?'btn-primary text-white':'btn-light'}`} onClick={() => setActiveTab('children')}>Children</button>
-                </li>
-                <li className="nav-item">
-                  <button className={`nav-link btn ${activeTab==='devices'?'btn-primary text-white':'btn-light'}`} onClick={() => setActiveTab('devices')}>Devices</button>
-                </li>
-                <li className="nav-item">
-                  <button className={`nav-link btn ${activeTab==='alerts'?'btn-primary text-white':'btn-light'}`} onClick={() => setActiveTab('alerts')}>Alerts</button>
-                </li>
-                <li className="nav-item">
-                  <button className={`nav-link btn ${activeTab==='audit'?'btn-primary text-white':'btn-light'}`} onClick={() => setActiveTab('audit')}>Audit Logs</button>
-                </li>
-                <li className="nav-item ms-3">
-                  <Link href="/login" className="btn btn-outline-secondary">Logout</Link>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </nav>
+  <div className="container-fluid">
+    <span className="navbar-brand fw-bold">Admin Dashboard</span>
+
+    <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+      <span className="navbar-toggler-icon"></span>
+    </button>
+
+    <div className="collapse navbar-collapse" id="navbarNav">
+      <ul className="navbar-nav ms-auto">
+
+        <li className="nav-item">
+          <button 
+            className="nav-link btn" 
+            style={{ color: activeTab==='users' ? '#00e0c6' : '#000' }}
+            onClick={() => setActiveTab('users')}
+          >
+            Authenticate Users
+          </button>
+        </li>
+
+        <li className="nav-item">
+          <button 
+            className="nav-link btn"
+            style={{ color: activeTab==='parents' ? '#00e0c6' : '#000' }}
+            onClick={() => setActiveTab('parents')}
+          >
+            Manage Parents
+          </button>
+        </li>
+
+        <li className="nav-item">
+          <button 
+            className="nav-link btn"
+            style={{ color: activeTab==='audit' ? '#00e0c6' : '#000' }}
+            onClick={() => setActiveTab('audit')}
+          >
+            Audit Logs
+          </button>
+        </li>
+
+        <li className="nav-item ms-3">
+          <Link href="/login" className="btn btn-outline-secondary">Logout</Link>
+        </li>
+
+      </ul>
+    </div>
+  </div>
+</nav>
+
 
         {/* Dashboard Content */}
         <div className="row g-3">
           
-          {activeTab === 'overview' && (
-            <>
-              <div className="col-12 col-md-6 col-lg-3" data-aos="fade-up">
-                <div className="card text-center p-3 h-100">
-                  <div className="fs-5 fw-bold">{mockParent.length || 1}</div>
-                  <div className="small text-muted">Parents</div>
-                </div>
-              </div>
-              <div className="col-12 col-md-6 col-lg-3" data-aos="fade-up">
-                <div className="card text-center p-3 h-100">
-                  <div className="fs-5 fw-bold">{mockChildren.length}</div>
-                  <div className="small text-muted">Children</div>
-                </div>
-              </div>
-              <div className="col-12 col-md-6 col-lg-3" data-aos="fade-up">
-                <div className="card text-center p-3 h-100">
-                  <div className="fs-5 fw-bold">{activeDevices}/{mockDevices.length}</div>
-                  <div className="small text-muted">Active Devices</div>
-                </div>
-              </div>
-              <div className="col-12 col-md-6 col-lg-3" data-aos="fade-up">
-                <div className="card text-center p-3 h-100">
-                  <div className="fs-5 fw-bold">{totalAlerts}</div>
-                  <div className="small text-muted">Total Alerts</div>
-                </div>
-              </div>
-            </>
-          )}
+        
 
           {activeTab === 'parents' && (
             <div className="col-12" data-aos="fade-up">
@@ -321,102 +298,74 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              <h5 className="fw-bold mt-4 mb-3">Pending Children</h5>
-              {pendingChildren.length === 0 ? (
-                <div className="alert alert-success">No children pending authentication</div>
-              ) : (
-                <div className="row row-cols-1 row-cols-md-2 g-3">
-                  {pendingChildren.map((child: any) => (
-                    <div key={child.childId} className="col">
-                      <div className="card p-3">
-                        <h6 className="fw-bold">{child.name}</h6>
-                        <p className="small mb-1"><strong>Parent ID:</strong> {child.parentId}</p>
-                        <p className="small mb-2"><strong>Age:</strong> {child.age}</p>
-                        <p className="small mb-3">
-                          <span className="badge bg-warning text-dark">Status: {child.status}</span>
-                        </p>
-                        <div className="d-flex gap-2">
-                          <button 
-                            className="btn btn-sm btn-success flex-fill"
-                            onClick={() => handleAuthenticateChild(child.childId, true)}
-                          >
-                            ✓ Approve
-                          </button>
-                          <button 
-                            className="btn btn-sm btn-danger flex-fill"
-                            onClick={() => handleAuthenticateChild(child.childId, false)}
-                          >
-                            ✕ Reject
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              
+              
             </div>
           )}
 
-          {activeTab === 'children' && (
-            <div className="col-12" data-aos="fade-up">
-              <h5 className="fw-bold mb-3">Children</h5>
-              <div className="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
-                {mockChildren.map((child) => (
-                  <div key={child.childId} className="col">
-                    <div className="card p-3">
-                      <strong>{child.name}</strong>
-                      <p>Status: {child.status === 'active' ? 'Safe' : 'In Danger'}</p>
-                    </div>
-                  </div>
-                ))}
+        
+          
+
+        {activeTab === 'audit' && (
+  <div className="col-12" data-aos="fade-up">
+    <h5 className="fw-bold mb-3">Recent Audit Logs</h5>
+
+    {recentAuditLogs.length === 0 && (
+      <div className="alert alert-info">No audit logs found</div>
+    )}
+
+    {recentAuditLogs.length > 0 && (
+      <>
+        {recentAuditLogs.map((log: any, index: number) => {
+
+          let parsed = log;
+          
+          // If backend accidentally sends as string, parse it
+          if (typeof log === "string") {
+            try {
+              parsed = JSON.parse(log);
+            } catch {
+              return (
+                <div key={index} className="card p-3 mb-2">
+                  <div className="fw-semibold">{log}</div>
+                </div>
+              );
+            }
+          }
+
+          return (
+            <div 
+              key={parsed.logId || index} 
+              className="card p-3 mb-2 shadow-sm"
+              style={{ borderLeft: "4px solid #0abdd6" }}
+            >
+              <div className="fw-bold text-dark">
+                {parsed.actionText || "No description available"}
+              </div>
+
+              <div className="text-muted small mt-1">
+                Admin: <span className="fw-semibold">{parsed.adminUserId || "-"}</span>
+              </div>
+
+              <div className="text-muted small">
+                {parsed.timestamp ? new Date(parsed.timestamp).toLocaleString() : ""}
               </div>
             </div>
-          )}
+          );
+        })}
 
-          {activeTab === 'devices' && (
-            <div className="col-12" data-aos="fade-up">
-              <h5 className="fw-bold mb-3">Device Health</h5>
-              <div className="row row-cols-1 row-cols-md-2 g-3">
-                {mockDevices.map((device) => (
-                  <div key={device.deviceId} className="col">
-                    <div className="card p-3 d-flex justify-content-between">
-                      <div>
-                        <strong>Device {device.deviceId}</strong>
-                        <p className="mb-1">{device.status}</p>
-                      </div>
-                      <span className={`fw-semibold ${device.batteryLevel > 50 ? 'text-success' : 'text-danger'}`}>
-                        {device.batteryLevel}%
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+        <Link
+          href="/admin/auditlog"
+          className="btn btn-outline-secondary btn-sm mt-3 w-100"
+        >
+          View All Logs
+        </Link>
+      </>
+    )}
+  </div>
+)}
 
-          {activeTab === 'alerts' && (
-            <div className="col-12" data-aos="fade-up">
-              <h5 className="fw-bold mb-3">Alerts</h5>
-              {mockAlerts.map((alert) => (
-                <div key={alert.alertId} className="card p-3 mb-2">
-                  <strong>{alert.childName}</strong>: {alert.description}
-                </div>
-              ))}
-            </div>
-          )}
 
-          {activeTab === 'audit' && (
-            <div className="col-12" data-aos="fade-up">
-              <h5 className="fw-bold mb-3">Recent Audit Logs</h5>
-              {recentAuditLogs.map((log) => (
-                <div key={log.logId} className="card p-3 mb-2">
-                  <div className="fw-semibold">{log.action}</div>
-                  <div className="text-muted" style={{ fontSize: '0.85rem' }}>{new Date(log.timestamp).toLocaleString()}</div>
-                </div>
-              ))}
-              <Link href="/admin/auditlog" className="btn btn-secondary btn-sm mt-2 w-100">View All Logs</Link>
-            </div>
-          )}
 
         </div>
       </div>
