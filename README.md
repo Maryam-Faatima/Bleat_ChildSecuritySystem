@@ -1,34 +1,42 @@
 # Bleat Child Security System
 
-A web-based child security system built with a Java backend and a TypeScript frontend.
+Bleat Child Security System is a project designed to help parents or guardians keep track of a child’s safety and security through a web-based application.
 
-## Overview
+It combines a **Java backend** with a **TypeScript frontend** to provide a full-stack solution for managing and viewing child safety-related information.
 
-This repository appears to contain the backend and frontend for the Bleat Child Security System. The project uses:
+## What this project is about
 
-- **Java** for backend/application logic
-- **TypeScript** for the frontend
-- **PowerShell**, **CSS**, **TSQL**, **Batchfile**, and **JavaScript** for supporting scripts and styling
+This repository contains the code for a system that appears to focus on child security monitoring and management. The project is split into frontend and backend parts so that the user interface and application logic can be developed separately.
 
-## Project Structure
+## Main technologies
 
-The repository includes a frontend app in `Frontend/bleatf/`.
+- **Java** — backend/application logic
+- **TypeScript** — frontend interface
+- **CSS** — styling
+- **PowerShell / Batchfile** — helper scripts
+- **TSQL** — database-related scripts
 
-## Getting Started
+## Repository structure
 
-Because setup details may vary depending on the backend and frontend modules, check the individual project folders for their own installation and run instructions. If you are working on the frontend app, see:
+- `Frontend/bleatf/` — frontend application
+- other folders — backend, database, or support files
 
-- `Frontend/bleatf/README.md`
+## For visitors
 
-## Next Steps
+If you are just visiting this repository, the easiest way to understand it is:
 
-If you'd like, I can also create a more complete root README with:
+1. Start with the project name and purpose above.
+2. Look inside the frontend folder to see the user interface.
+3. Review the backend code to see how the system works behind the scenes.
+4. Check for setup or run instructions in subfolder README files.
 
-- project description
-- features
-- setup instructions
-- environment variables
-- run/build commands
-- deployment notes
+## Note
+
+This README is a simple overview meant to help visitors quickly understand the project. If you want, I can make it even better by adding:
+
+- a short feature list
 - screenshots
+- a clear setup guide
+- a folder-by-folder explanation
+- a more polished homepage-style introduction
 
