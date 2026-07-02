@@ -1,42 +1,51 @@
 # Bleat Child Security System
 
-Bleat Child Security System is a project designed to help parents or guardians keep track of a child’s safety and security through a web-based application.
+Bleat Child Security System is a full-stack web application built to help parents and guardians better understand and manage child safety-related information in one place.
 
-It combines a **Java backend** with a **TypeScript frontend** to provide a full-stack solution for managing and viewing child safety-related information.
+The project combines a **Java backend** with a **TypeScript frontend**, bringing together application logic, data handling, and a user-friendly interface.
 
-## What this project is about
+## What this project does
 
-This repository contains the code for a system that appears to focus on child security monitoring and management. The project is split into frontend and backend parts so that the user interface and application logic can be developed separately.
+This repository appears to support a child security system with separate frontend and backend components. In simple terms, it is designed so users can interact with a web interface while the backend handles the core processing and data management.
 
-## Main technologies
+## Key ideas
 
-- **Java** — backend/application logic
-- **TypeScript** — frontend interface
-- **CSS** — styling
-- **PowerShell / Batchfile** — helper scripts
-- **TSQL** — database-related scripts
+- **Easy-to-use interface** for visitors and users
+- **Structured backend** for application logic
+- **Frontend and backend separation** for easier development and maintenance
+- **Database and scripting support** for project setup and management
 
-## Repository structure
+## Technologies used
+
+- **Java**
+- **TypeScript**
+- **CSS**
+- **TSQL**
+- **PowerShell**
+- **Batchfile**
+- **JavaScript**
+
+## Project layout
+
+A quick way to explore the repository:
 
 - `Frontend/bleatf/` — frontend application
-- other folders — backend, database, or support files
+- other folders — backend code, scripts, or supporting files
 
-## For visitors
+## Getting started
 
-If you are just visiting this repository, the easiest way to understand it is:
+If you are new to this project, start by checking the folders that contain setup or run instructions. The frontend folder already includes its own README, which is a good place to begin.
 
-1. Start with the project name and purpose above.
-2. Look inside the frontend folder to see the user interface.
-3. Review the backend code to see how the system works behind the scenes.
-4. Check for setup or run instructions in subfolder README files.
+## Why this README exists
 
-## Note
+This README is written to give visitors a quick, clear understanding of the project without needing to read the entire codebase first.
 
-This README is a simple overview meant to help visitors quickly understand the project. If you want, I can make it even better by adding:
+If you want to improve it further, the next best additions would be:
 
-- a short feature list
 - screenshots
-- a clear setup guide
-- a folder-by-folder explanation
-- a more polished homepage-style introduction
+- a feature list
+- installation instructions
+- environment variables
+- run/build commands
+- a diagram of how the system works
 
